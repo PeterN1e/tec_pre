@@ -8,7 +8,7 @@ class CnnEncoder(nn.Module):
     """
     利用卷积网络对tec灰度图进行特征提取，实际上就是编码
     输入为（batch，seq_length,71,73）
-    但是，con2d只能传递4个维度的数据，无法容纳“频道”和”步长“参数了、
+    但是，con3d只能传递4个维度的数据，无法容纳“频道”和”步长“参数了、
     所以，将时间步转化为频道信号
     """
     def __init__(self,transmit_parameter,out_dim):
