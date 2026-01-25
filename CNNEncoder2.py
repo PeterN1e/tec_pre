@@ -6,9 +6,9 @@ import torch.nn as nn
 from config import batch_size
 class CnnEncoder(nn.Module):
     """
-    利用卷积网络对tec灰度图进行特征提取，实际上就是编码
+    在原有版本上将二维卷积换成三维卷积，增加时间序列
     输入为（batch，seq_length,71,73）
-    但是，con3d只能传递4个维度的数据，无法容纳“频道”和”步长“参数了、
+    但是，con3d可以传递5个维度的数据，无法容纳“频道”和”步长“参数了、
     所以，将时间步转化为频道信号
     """
     def __init__(self,transmit_parameter,out_dim):
@@ -16,7 +16,7 @@ class CnnEncoder(nn.Module):
         self.Tec_encoder = nn.Sequential(  #把几个层包装成块
             nn.Conv2d(in_channels=24, out_channels = transmit_parameter, padding=0, kernel_size=1, stride=1),
             # (B,C,H,W):(1,1,71,73)
-            nn.ReLU(),#当网络特别深、特征图很大（如 3D 医学图像、高分辨率 TEC 地图）
+            nn.ReLU(),#当网络特别深、特征图很大（如3D医学图像、高分辨率 TEC 地图）
             # ，显存吃紧用inplace=True  默认为False
             nn.Conv2d(in_channels = transmit_parameter, out_channels=transmit_parameter*2, padding=1, kernel_size=3, stride=2),
             #(1,64*2,36,37)
