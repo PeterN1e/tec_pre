@@ -60,13 +60,13 @@ class TecPreTransformer(nn.Module):
         memory = self.transformer_encoder(src)  # (batch, 24, d_model)
         # 4. 时间维度压缩: 从24帧生成1帧
         # 先转置: (batch, d_model, 24)
-        memory = memory.transpose(1, 2)
-        # 然后线性映射到1帧: (batch, d_model, 1)
-        predicted = self.predict_head(memory)
-        # 再转回来: (batch, 1, d_model)
-        predicted = predicted.transpose(1, 2)
+        last_step_hidden = memory[:,-1,:]
+        #取最后一个时间步
+
         # 5. 输出映射: (batch, 1, d_model) -> (batch, 1, 500)
-        output = self.output_projection(predicted)
+        output = self.output_projection(last_step_hidden)
+
+        output = output.view(batch_size, 1, 1368)
         #output(24,1,1368)
         return output
 
@@ -87,7 +87,7 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.size(1), :].transpose(0, 1)
         return self.dropout(x)
 
-# if __name__ == '__main__':
+# if __name__ == '__main__': 
 #     a = torch.randn(1,24,500)
 #     Transformer = TecPreTransformer(in_dim = 500,history_len = 24,predict_len = 1,d_model = 512)
 #     print(Transformer(a).shape)

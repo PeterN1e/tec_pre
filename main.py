@@ -131,8 +131,8 @@ def inverse_transform_predictions(predictions,actual,scaler):
     :param scaler:设定的标准化
     :return:
     """
-    pre = predictions[0,0,:,:,:]
-    act= actual[0,0,:,:]
+    pre = predictions[10,0,:,:,:]
+    act= actual[10,0,:,:]
     # pre = pre.squeeze(0)
     # act = act.squeeze(0)
     pre = pre.reshape(1,-1)
@@ -183,9 +183,9 @@ def model_predict_only():
     loaded_model = torch.load("model.pth")
     tec_predict = TecPredict(loaded_model,test_dataloader)
     pre, act = tec_predict()
-    pre,act =inverse_transform_predictions(pre,act,tec_scaler)#########
+    pre,act =inverse_transform_predictions(pre,act,tec_scaler)
     print(pre.shape,act.shape)
-    #exit()
+
     plt.figure(figsize=(10, 10))
     # proj = ccrs.PlateCarree()
     plt.subplot(2, 1, 1)
@@ -196,7 +196,7 @@ def model_predict_only():
     #plt.savefig(f'tecUHR_{0}.png', dpi=150)
 
     plt.subplot(2, 1, 2)
-    plt.pcolormesh( act[ 0, :, :], shading='auto', cmap='jet')
+    plt.pcolormesh( act[0, :, :], shading='auto', cmap='jet')
     plt.colorbar(label='TECU')
     plt.title('tec act')
     #plt.savefig(f'tecUHR_{0}.png', dpi=150)

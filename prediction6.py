@@ -6,7 +6,7 @@ class TecPredict(nn.Module):
         super().__init__()
         self.model = model
         self.test_loader = test_loader
-    def forward(self,frame_num=3):
+    def forward(self,frame_num=24):
         """
 
         :param frame_num: 预测的帧数
