@@ -131,16 +131,24 @@ def inverse_transform_predictions(predictions,actual,scaler):
     :param scaler:设定的标准化
     :return:
     """
-    pre = predictions[10,0,:,:,:]
-    act= actual[10,0,:,:]
+    #predictions:由[24,1,71,73]构成的列表
+    #actual[24,71,73]构成的列表
+    pre = predictions[0]
+    act= actual[0]
+
+    pre = pre[0,:,:,:]#变为（1，71，73）
+    #act = act[:,:,:]    #变为（24，71，73）
     # pre = pre.squeeze(0)
     # act = act.squeeze(0)
-    pre = pre.reshape(1,-1)
-    act = act.reshape(1,-1)
+    original_shape_tec_train = pre.shape
+    pre = pre.reshape(original_shape_tec_train[0],-1)
+
+    original_shape_tec_train = act.shape
+    act = act.reshape(original_shape_tec_train[0],-1)   #将数据转化为一行
     pre=scaler.inverse_transform(pre)
     act=scaler.inverse_transform(act)
     pre = pre.reshape(1, 71, 73)
-    act = act.reshape(1, 71, 73)
+    act = act.reshape(24, 71, 73)
     return pre,act
 
 
@@ -185,7 +193,15 @@ def model_predict_only():
     pre, act = tec_predict()
     pre,act =inverse_transform_predictions(pre,act,tec_scaler)
     print(pre.shape,act.shape)
+    ###########################
+    plt.figure(figsize=(120, 10))
+    for i in range(24):
 
+        plt.subplot(2, 12, i+1)
+        plt.pcolormesh(act[i-1, :, :], shading='auto', cmap='jet')
+    plt.show()
+    exit()
+    ############################
     plt.figure(figsize=(10, 10))
     # proj = ccrs.PlateCarree()
     plt.subplot(2, 1, 1)
@@ -196,7 +212,7 @@ def model_predict_only():
     #plt.savefig(f'tecUHR_{0}.png', dpi=150)
 
     plt.subplot(2, 1, 2)
-    plt.pcolormesh( act[0, :, :], shading='auto', cmap='jet')
+    plt.pcolormesh( act[0,:, :], shading='auto', cmap='jet')
     plt.colorbar(label='TECU')
     plt.title('tec act')
     #plt.savefig(f'tecUHR_{0}.png', dpi=150)

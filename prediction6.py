@@ -6,7 +6,7 @@ class TecPredict(nn.Module):
         super().__init__()
         self.model = model
         self.test_loader = test_loader
-    def forward(self,frame_num=24):
+    def forward(self,frame_num=1):
         """
 
         :param frame_num: 预测的帧数
@@ -21,11 +21,11 @@ class TecPredict(nn.Module):
                 batch_in_aux = batch_in_aux.float().cuda()
                 batch_exp = batch_exp.float().cuda()
                 output = self.model(batch_in_tec,batch_in_aux)
-                print(f"预测第{frame_num}帧")
+                print(f"预测第{frame_num}组")
                 predictions.append(output.cpu().numpy())
                 actuals.append(batch_exp.cpu().numpy())
-                if frame_num==1:
+                if frame_num==24:
                     break
-                frame_num-=1
+                frame_num+=1
         return np.array(predictions),np.array(actuals)
 
