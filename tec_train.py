@@ -54,12 +54,11 @@ class TrainModel(nn.Module):
                 batch_in_tec: torch.Size([batch_size, 24, 71, 73])
                 batch_in_aux: torch.Size([batch_size, 24, 4])
                 """
-                # print("batch_in_tec:",batch_in_tec.shape)
-                # print("batch_in_aux:", batch_in_aux.shape)
 
-                batch_in_tec = batch_in_tec.float().cuda()#转换前的数据类型为float64，为了和之后权重（float32）偏置计算
-                batch_in_aux = batch_in_aux.float().cuda()
-                batch_exp = batch_exp.float().cuda()
+
+                batch_in_tec = batch_in_tec.float().to(device)#转换前的数据类型为float64，为了和之后权重（float32）偏置计算
+                batch_in_aux = batch_in_aux.float().to(device)
+                batch_exp = batch_exp.float().to(device)
                 #batch_exp(24,71,73)
                 output = self.model(batch_in_tec,batch_in_aux)
                 #output:(24,1,71,73)

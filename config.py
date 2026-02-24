@@ -10,10 +10,11 @@ out_dim = 128            #卷积编码层最终线性层的输出维度
          #数据集序列长度
 ######### main.py
 import torch
-epochs_num = 7
+epochs_num = 5
 batch_size = 24
-seq_length = 24     #一个batch序列时间步数
+seq_length = 12     #一个batch序列时间步数
 
 
 ######### transformerModule3
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cpu')

@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
+from config import device
 class TecPredict(nn.Module):
     def __init__(self,model,test_loader):
         super().__init__()
@@ -17,9 +18,9 @@ class TecPredict(nn.Module):
         actuals = []
         with torch.no_grad():
             for batch_in_tec,batch_in_aux,batch_exp in self.test_loader:
-                batch_in_tec = batch_in_tec.float().cuda()  # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
-                batch_in_aux = batch_in_aux.float().cuda()
-                batch_exp = batch_exp.float().cuda()
+                batch_in_tec = batch_in_tec.float().to(device)  # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
+                batch_in_aux = batch_in_aux.float().to(device)
+                batch_exp = batch_exp.float().to(device)
                 output = self.model(batch_in_tec,batch_in_aux)
                 print(f"预测第{frame_num}组")
                 predictions.append(output.cpu().numpy())

@@ -7,7 +7,6 @@ from os import listdir
 import os
 import torch
 import numpy as np
-
 import pandas as pd  #分析结构化数据
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -43,8 +42,8 @@ class TecDataset(Dataset):
 class TecDataset1(Dataset):
     def __init__(self,data_tec,data_aux,seq_length):
         super().__init__()
-        self.data_aux = data_aux
-        self.data_tec = data_tec
+        self.data_aux = data_aux.astype(np.float32)
+        self.data_tec = data_tec.astype(np.float32)
         self.seq_length =seq_length
     def __len__(self):
         return len(self.data_tec)-self.seq_length

@@ -8,6 +8,7 @@ import numpy as np
 from torch.utils.data import Dataset,DataLoader
 from dataloader1 import TecDataset,TecDataset1,data_reader
 from tec_train import TrainModel
+from pic_show7 import pic_show
 import torch.optim as optim
 import warnings
 from sklearn.preprocessing import MinMaxScaler
@@ -63,7 +64,7 @@ def main():
     model = ModelAll(transmit_parameter=48,
                      history_len = 24,
                      predict_len = 1,
-                     d_model = 512,
+                     d_model = 1024,
                      in_dim2 = 500,
                      out_dim1 = 500
                      )
@@ -118,9 +119,7 @@ def main():
     plt.show()
 
     ########预测
-    tec_predict = TecPredict(model,test_dataloader)
-    pre,act = tec_predict()
-    print(pre.shape,act.shape)#(frame, batch_size, seq_length, 71, 73) (frame, batch_size, 71, 73)
+    #(frame, batch_size, seq_length, 71, 73) (frame, batch_size, 71, 73)
 
 
 def inverse_transform_predictions(predictions,actual,scaler):
@@ -134,9 +133,10 @@ def inverse_transform_predictions(predictions,actual,scaler):
     #predictions:由[24,1,71,73]构成的列表
     #actual[24,71,73]构成的列表
     pre = predictions[0]
+
     act= actual[0]
 
-    pre = pre[0,:,:,:]#变为（1，71，73）
+    #pre = pre[0,:,:,:]#变为（1，71，73）
     #act = act[:,:,:]    #变为（24，71，73）
     # pre = pre.squeeze(0)
     # act = act.squeeze(0)
@@ -147,7 +147,7 @@ def inverse_transform_predictions(predictions,actual,scaler):
     act = act.reshape(original_shape_tec_train[0],-1)   #将数据转化为一行
     pre=scaler.inverse_transform(pre)
     act=scaler.inverse_transform(act)
-    pre = pre.reshape(1, 71, 73)
+    pre = pre.reshape(24, 71, 73)
     act = act.reshape(24, 71, 73)
     return pre,act
 
@@ -173,9 +173,12 @@ def model_predict_only():
 
     test_scaled_tec = tec_scaler.transform(test_data_tec_2d)
     test_scaled_aux = aux_scaler.transform(test_data_aux)
-
+    # print("训练数据方差：", np.var(train_scaled_tec))
+    # print("测试数据方差：", np.var(test_scaled_tec))
+    # exit()
     #train_scaled_tec = train_scaled_tec.reshape(original_shape_tec_train)  # 归一化后转变成原来的形状
     test_scaled_tec = test_scaled_tec.reshape(original_shape_tec_test)
+
 
     #print("test_scaled_tec:", train_scaled_tec.shape)
     print("test_scaled_aux:", test_scaled_tec.shape)
@@ -188,36 +191,15 @@ def model_predict_only():
     #train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
 
-    loaded_model = torch.load("model.pth")
+    loaded_model = torch.load("model.pth").to(device)
     tec_predict = TecPredict(loaded_model,test_dataloader)
     pre, act = tec_predict()
     pre,act =inverse_transform_predictions(pre,act,tec_scaler)
     print(pre.shape,act.shape)
-    ###########################
-    plt.figure(figsize=(120, 10))
-    for i in range(24):
 
-        plt.subplot(2, 12, i+1)
-        plt.pcolormesh(act[i-1, :, :], shading='auto', cmap='jet')
-    plt.show()
-    exit()
-    ############################
-    plt.figure(figsize=(10, 10))
-    # proj = ccrs.PlateCarree()
-    plt.subplot(2, 1, 1)
-    plt.pcolormesh(pre[0,:,:], shading='auto', cmap='jet')
+    pic_show(act,pre)#引用“图片展示”实例
 
-    plt.colorbar(label='TECU')
-    plt.title("tec pre")
-    #plt.savefig(f'tecUHR_{0}.png', dpi=150)
 
-    plt.subplot(2, 1, 2)
-    plt.pcolormesh( act[0,:, :], shading='auto', cmap='jet')
-    plt.colorbar(label='TECU')
-    plt.title('tec act')
-    #plt.savefig(f'tecUHR_{0}.png', dpi=150)
-
-    plt.show()
 if __name__ == "__main__":
-    model_predict_only()
-    #main()
+    #model_predict_only()
+    main()
