@@ -31,3 +31,7 @@ For epoch in range(10):                      # 训练10轮
 
 """
 #调整batch_size和epoch是调参重点，seq_length通常是数据固有属性
+
+"""
+
+"""
