@@ -68,7 +68,8 @@ class TecPreTransformer(nn.Module):
         # 先转置: (batch, d_model, 24)
         last_step_hidden = memory[:,-1,:]  #取出最后1步
         #取最后一个时间步
-        # 5. 输出映射: (batch, 1, d_model) -> (batch, 1 , 500)
+        # 5. 输出映射: (batch, 1, d_model) -> (batch , 500)
+        last_step_hidden = last_step_hidden.reshape(batch_size,self.predict_len,-1)
         output = self.output_projection(last_step_hidden)
         output = output.view(batch_size, self.predict_len, -1)  # 动态适配predict_len
         # output(24,1,1368)

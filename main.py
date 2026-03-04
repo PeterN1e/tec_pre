@@ -6,7 +6,7 @@ from keras import device
 from config import train_path,test_path,device,batch_size,seq_length,epochs_num
 import numpy as np
 from torch.utils.data import Dataset,DataLoader
-from dataloader1 import TecDataset,TecDataset1,data_reader
+from dataloader1 import TecDataset1,data_reader
 from tec_train import TrainModel
 from pic_show7 import pic_show
 import torch.optim as optim
@@ -17,6 +17,23 @@ import matplotlib.pyplot as plt
 from prediction6 import TecPredict
 import cdflib
 
+
+def scale_tec_aux_data(data, scaler, fit_scaler=True):
+    """
+    将tec数据进行降维 步骤：reshape → 缩放 → 恢复形状
+    :param data: tec数据和辅助特征aux
+    :param scaler: 创建实例后的MinMaxScaler
+    :param fit_scaler: True则fit_transform（训练集），False则transform（测试集）
+    :return:
+    """
+    batch, w, h = data.shape
+    data_2d = data.reshape(batch, w * h)
+    if fit_scaler:
+        scaled = scaler.fit_transform(data_2d)
+    else:
+        scaled = scaler.transform(data_2d)
+    return scaled.reshape(batch, w, h)
+
 def main():
     torch.manual_seed(42)  # 42是生命、宇宙和一切终极问题的答案
     np.random.seed(42)
@@ -25,27 +42,14 @@ def main():
     train_data_tec, train_data_aux= data_reader(train_path)
     test_data_tec, test_data_aux= data_reader(test_path)
 
-
     tec_scaler = MinMaxScaler()#不同数据缩放器不允许共同使用
     aux_scaler = MinMaxScaler()
 
-    ##########将tec数据进行降维 步骤：reshape → 缩放 → 恢复形状
-    original_shape_tec_train = train_data_tec.shape    #保存原始形状
-    train_data_tec_2d = train_data_tec.reshape(original_shape_tec_train[0], -1)# 变为 (6528, 71*73)
-    original_shape_tec_test = test_data_tec.shape
-    test_data_tec_2d = test_data_tec.reshape(original_shape_tec_test[0], -1)  # 变为 (2208, 71*73)
+    train_scaled_tec = scale_tec_aux_data(train_data_tec,tec_scaler,fit_scaler=True) #归一化后转变成原来的形状
+    test_scaled_tec = scale_tec_aux_data(test_data_tec,tec_scaler,fit_scaler=False)
 
-    print("train_data_tec1:", train_data_tec_2d.shape)
-    print("test_data_tec1:", test_data_tec_2d.shape)
-
-    train_scaled_tec= tec_scaler.fit_transform(train_data_tec_2d)
-    train_scaled_aux= aux_scaler.fit_transform(train_data_aux)
-
-    test_scaled_tec = tec_scaler.transform(test_data_tec_2d)
-    test_scaled_aux = aux_scaler.transform(test_data_aux)
-
-    train_scaled_tec = train_scaled_tec.reshape(original_shape_tec_train) #归一化后转变成原来的形状
-    test_scaled_tec = test_scaled_tec.reshape(original_shape_tec_test)
+    train_scaled_aux = scale_tec_aux_data(train_data_aux,aux_scaler,fit_scaler=True)
+    test_scaled_aux = scale_tec_aux_data(test_data_aux,aux_scaler,fit_scaler=False)
 
     print("test_scaled_tec:", train_scaled_tec.shape)
     print("test_scaled_aux:", test_scaled_tec.shape)
@@ -55,14 +59,14 @@ def main():
     train_dataset = TecDataset1(train_scaled_tec, train_scaled_aux, seq_length=seq_length)
     test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length=seq_length)
 
-    train_dataloader = DataLoader(train_dataset,batch_size=batch_size, shuffle=False,drop_last = False)
-    test_dataloader = DataLoader(test_dataset,batch_size=batch_size, shuffle=False,drop_last = False)
+    train_dataloader = DataLoader(train_dataset,batch_size=batch_size, shuffle=True,drop_last = True)
+    test_dataloader = DataLoader(test_dataset,batch_size=batch_size, shuffle=False,drop_last = True)
     print("训练数据集总步长：", train_dataset.__len__())
     print("测试数据集总步长：", test_dataset.__len__())
     print(f"批次大小：{batch_size}")
 
     model = ModelAll(transmit_parameter=48,
-                     history_len = 24,
+                     history_len = seq_length,
                      predict_len = 1,
                      d_model = 1024,
                      in_dim2 = 500,
@@ -118,10 +122,6 @@ def main():
     plt.tight_layout()
     plt.show()
 
-    ########预测
-    #(frame, batch_size, seq_length, 71, 73) (frame, batch_size, 71, 73)
-
-
 def inverse_transform_predictions(predictions,actual,scaler):
     """
     作用：对数据进行反标准化，还原至输入状态
@@ -130,25 +130,23 @@ def inverse_transform_predictions(predictions,actual,scaler):
     :param scaler:设定的标准化
     :return:
     """
-    #predictions:由[24,1,71,73]构成的列表
+    #predictions:由[24,71,73]构成的列表
     #actual[24,71,73]构成的列表
     pre = predictions[0]
-
     act= actual[0]
 
-    #pre = pre[0,:,:,:]#变为（1，71，73）
-    #act = act[:,:,:]    #变为（24，71，73）
-    # pre = pre.squeeze(0)
-    # act = act.squeeze(0)
+    h = pre.size(1)  #图片宽高
+    w = pre.size(2)
+
     original_shape_tec_train = pre.shape
     pre = pre.reshape(original_shape_tec_train[0],-1)
 
-    original_shape_tec_train = act.shape
-    act = act.reshape(original_shape_tec_train[0],-1)   #将数据转化为一行
+    original_shape_tec_test = act.shape
+    act = act.reshape(original_shape_tec_test[0],-1)   #将数据转化为一行
     pre=scaler.inverse_transform(pre)
     act=scaler.inverse_transform(act)
-    pre = pre.reshape(24, 71, 73)
-    act = act.reshape(24, 71, 73)
+    pre = pre.reshape(batch_size, h, w)
+    act = act.reshape(batch_size, h, w)
     return pre,act
 
 
@@ -188,8 +186,8 @@ def model_predict_only():
     #train_dataset = TecDataset1(train_scaled_tec, train_scaled_aux, seq_length=seq_length)
     test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length=seq_length)
 
-    #train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    #train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
 
     loaded_model = torch.load("model.pth").to(device)
     tec_predict = TecPredict(loaded_model,test_dataloader)
@@ -201,5 +199,5 @@ def model_predict_only():
 
 
 if __name__ == "__main__":
-    #model_predict_only()
-    main()
+    model_predict_only()
+    #main()
