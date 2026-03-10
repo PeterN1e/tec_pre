@@ -10,9 +10,9 @@ out_dim = 128            #卷积编码层最终线性层的输出维度
          #数据集序列长度
 ######### main.py
 import torch
-epochs_num = 5
+epochs_num = 10
 batch_size = 24
-seq_length = 12     #一个batch序列时间步数
+seq_length = 6    #一个batch序列时间步数
 
 
 ######### transformerModule3

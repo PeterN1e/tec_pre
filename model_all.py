@@ -19,7 +19,13 @@ class ModelAll(nn.Module):
         self.encoder = CnnEncoder(transmit_parameter=transmit_parameter,
                              out_dim=out_dim1)
         self.transformer = TecPreTransformer(in_dim=in_dim2,history_len= history_len,predict_len= predict_len,d_model=d_model)
-        self.decoder = CnnDecoder(transmit_parameter_de=1)
+        self.decoder = CnnDecoder(transmit_parameter_de=transmit_parameter)
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        for p in self.parameters():#遍历模型内所有参数
+            if p.dim()>1:
+                nn.init.xavier_uniform_(p)
 
     def forward(self,tec24,aux):
         """

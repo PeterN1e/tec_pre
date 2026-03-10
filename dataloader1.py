@@ -11,32 +11,36 @@ import pandas as pd  #分析结构化数据
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
-class TecDataset(Dataset):
-    def __init__(self,day_seq, data_path):
-        super().__init__()
-        self.day_seq = day_seq
-        self.data_path = data_path
-        self.tec_batch =[]
+import numpy as np
 
-        tec_path_all = os.path.join(self.data_path, "tecMap")
-        feature_path_all = os.path.join(self.data_path, "omni_2011_complete.csv")
-        tec_data_list = listdir(tec_path_all)
-        # tec_data.sort()
-        if day_seq == -1:
-            day_seq = len(tec_data_list)
-        # 用于读取tec图
-        for day in range(self.day_seq):
-            tec_absolute_path = os.path.join(self.data_path, "tecMap", tec_data_list[day])
-            cdf = cdflib.CDF(f"{tec_absolute_path}")
-            # cdf = cdflib.CDF(f"D:/Dataset______________/tec/tec_2011/{tec_data[0]}")
-            tec = cdf.varget('tecUHR')
-            for h in range(tec.shape[0]):
-                self.tec_batch.append(tec[h])
-        self.feature_list=pd.read_csv(feature_path_all)
-    def __len__(self):
-        return self.day_seq*24
-    def __getitem__(self, index):
-        return self.tec_batch[index],[self.feature_list["hour"][index],self.feature_list["ssn"][index],self.feature_list["dst"][index],self.feature_list["f10.7"][index]]
+
+def detect_all_same_value(tec_data: np.ndarray) -> list:
+    """
+    检测71x73矩阵中所有元素为同一值（方差=0）的异常数据
+    :param tec_data: 输入数据，shape=(n,71,73)
+    :return: 异常矩阵的索引列表
+    """
+    anomaly_indices = []
+    # 遍历每个71x73矩阵
+    for idx in range(len(tec_data)):
+        mat = tec_data[idx]
+        # 方差为0 说明所有元素值相同
+        if np.var(mat) == 0:
+            # 获取该矩阵的唯一值
+            same_value = mat[0, 0]
+            anomaly_indices.append(idx)
+            # 实时提示异常信息
+            print(f"⚠️  索引{idx}的71x73矩阵：所有元素均为 {same_value}（方差=0，异常）")
+
+    # 汇总检测结果
+    print("=" * 70)
+    if anomaly_indices:
+        print(f"检测完成！共发现{len(anomaly_indices)}个异常矩阵，索引：{anomaly_indices}")
+    else:
+        print("检测完成！未发现所有元素为同一值的异常矩阵（所有矩阵方差均>0）")
+    print("=" * 70)
+    return anomaly_indices
+
 
 
 class TecDataset1(Dataset):
@@ -63,58 +67,18 @@ def data_reader(data_path):
         tec = cdf.varget('tecUHR')
         for h in range(tec.shape[0]):
             tec_batch.append(tec[h])
+
     feature_list = pd.read_csv(feature_path_all)
-
+    tec_batch = np.array(tec_batch)
     aux = ["hour","ssn","dst","f10.7"]
-    return np.array(tec_batch),np.array(feature_list[aux].values)
-    #<class 'numpy.ndarray'>:(6528, 71,73),(6528, 4)
+    #detect_all_same_value(tec_batch)
 
-#print(y.shape)
-
-# i=0
-# for x,y in train_dataloader:
-#     print(x)
-#     print(x)
-#     i+=1
-# print(i)
-# exit()
-#def tec_dataloader():
-"""
-TEC数据集类
-"""
-
-
-# tec1 = TecDataset(1,1,"D:\\Dataset______________\\tec\\2011\\TestDataset")
-# print(tec1[0])
-# exit()
+    return tec_batch,np.array(feature_list[aux].values)
 
 
 
-# cdf  = cdflib.CDF('D:/Dataset______________/tec/tec_2011/gps_tec1hr_igs_20110101_v01.cdf')
-#
-# tec  = cdf.varget('tecUHR')   #.varget提取出指定变量 或者 tecEHR / tecCOD / tecCOR
-#
-# lat  = cdf.varget('lat')
-# print(lat)
-# print('lat shape :', lat.shape)  #lat shape : (71,)
-#
-# lon = cdf.varget('lon')         #lon shape : (73,)
-# img = Image.fromarray(tec[0,:,:])
-#
-# print(tec[0,:,:])
-# img.show()
-# print('tec[0,:,:] shape :',tec[0,:,:].shape)
-# print('tec[0,:,:] 类型 :',type(tec[0,:,:]))
-# #exit()
-#
-# print('tec shape :', tec.shape)   # 预期 (time, lat, lon)
-# print("tec size :", tec.size)
-# print('lat shape :', lat.shape)
-#
-# print('lon shape :', lon.shape)
-# print(type(lon))                  # 查看类型<class 'numpy.ndarray'>
-# print(lon.dtype)                   #查看数据类型  float32
-#
+
+
 # plt.show()
 #
 # plt.figure(figsize=(10,5))

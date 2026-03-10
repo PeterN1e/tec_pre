@@ -21,18 +21,31 @@ import cdflib
 def scale_tec_aux_data(data, scaler, fit_scaler=True):
     """
     将tec数据进行降维 步骤：reshape → 缩放 → 恢复形状
-    :param data: tec数据和辅助特征aux
+    :param data: tec数据或辅助特征aux
     :param scaler: 创建实例后的MinMaxScaler
     :param fit_scaler: True则fit_transform（训练集），False则transform（测试集）
     :return:
     """
-    batch, w, h = data.shape
-    data_2d = data.reshape(batch, w * h)
-    if fit_scaler:
-        scaled = scaler.fit_transform(data_2d)
+    dim = data.ndim
+    if dim == 3:
+        num, w, h = data.shape
+        data_2d = data.reshape(num, w * h)
+        if fit_scaler:
+            scaled = scaler.fit_transform(data_2d)
+        else:
+            scaled = scaler.transform(data_2d)
+        return scaled.reshape(num, w, h)
+    elif dim == 2:
+        num, w = data.shape
+        data_2d = data
+        if fit_scaler:
+            scaled = scaler.fit_transform(data_2d)
+        else:
+            scaled = scaler.transform(data_2d)
+        return scaled.reshape(num, w)
     else:
-        scaled = scaler.transform(data_2d)
-    return scaled.reshape(batch, w, h)
+        print("输入维度错误，检查")
+        exit()
 
 def main():
     torch.manual_seed(42)  # 42是生命、宇宙和一切终极问题的答案
@@ -65,20 +78,18 @@ def main():
     print("测试数据集总步长：", test_dataset.__len__())
     print(f"批次大小：{batch_size}")
 
-    model = ModelAll(transmit_parameter=48,
-                     history_len = seq_length,
-                     predict_len = 1,
-                     d_model = 1024,
-                     in_dim2 = 500,
-                     out_dim1 = 500
-                     )
-
+    model = ModelAll(transmit_parameter=3,
+                     history_len=seq_length,
+                     predict_len=1,
+                     d_model=512,
+                     in_dim2=512,
+                     out_dim1=512
+                     ).to(device)
     model = model.to(device)
 
     criterion_mse = nn.MSELoss()
     criterion_mae = nn.L1Loss()
     criterion_l1smooth = nn.SmoothL1Loss()
-
 
     optimizer=optim.Adam(model.parameters(),lr=0.001)   #优化器对象
     print("基础模型创建完成!")
@@ -86,10 +97,10 @@ def main():
 
     print("开始训练模型...")
 
-    tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_l1smooth,optimizer=optimizer)
+    tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_mae,optimizer=optimizer)
     train_losses, test_losses = tec_train(epochs_num)
 
-    torch.save(model, "model.pth")
+    torch.save(model.state_dict(), "model_state_dict.pth")
     print("the model training is completed and saved")
 
     plt.rcParams['font.sans-serif']=['Microsoft YaHei', 'Arial Unicode MS']  #称之为rc配置或rc参数。通过rc参数可以修改默认的属性，
@@ -106,7 +117,7 @@ def main():
     plt.plot(test_losses, label='test loss')
     plt.title("model loss")
     plt.xlabel('Epoch')  # 分别为x ，y轴添加标签
-    plt.ylabel('label')
+    plt.ylabel('loss')
     plt.legend()  # 用于为图表添加图例，适用于 区分不同数据系列，提高可读性。
     plt.grid(True, alpha=0.3)
     plt.subplot(1, 2, 2)
@@ -132,22 +143,16 @@ def inverse_transform_predictions(predictions,actual,scaler):
     """
     #predictions:由[24,71,73]构成的列表
     #actual[24,71,73]构成的列表
-    pre = predictions[0]
-    act= actual[0]
-
-    h = pre.size(1)  #图片宽高
-    w = pre.size(2)
+    pre = predictions[0,:,:,:]
+    act= actual[0,:,:,:]
 
     original_shape_tec_train = pre.shape
-    pre = pre.reshape(original_shape_tec_train[0],-1)
-
+    pre_2d = pre.reshape(original_shape_tec_train[0],-1)
     original_shape_tec_test = act.shape
-    act = act.reshape(original_shape_tec_test[0],-1)   #将数据转化为一行
-    pre=scaler.inverse_transform(pre)
-    act=scaler.inverse_transform(act)
-    pre = pre.reshape(batch_size, h, w)
-    act = act.reshape(batch_size, h, w)
-    return pre,act
+    act_2d = act.reshape(original_shape_tec_test[0],-1)   #将数据转化为一行
+    pre_inv=scaler.inverse_transform(pre_2d).reshape(pre.shape)
+    act_inv=scaler.inverse_transform(act_2d).reshape(act.shape)
+    return pre_inv,act_inv
 
 
 def model_predict_only():
@@ -158,25 +163,12 @@ def model_predict_only():
     aux_scaler = MinMaxScaler()
 
     ##########将tec数据进行降维 步骤：reshape → 缩放 → 恢复形状
-    original_shape_tec_train = train_data_tec.shape  # 保存原始形状
-    train_data_tec_2d = train_data_tec.reshape(original_shape_tec_train[0], -1)  # 变为 (6528, 71*73)
-    original_shape_tec_test = test_data_tec.shape
-    test_data_tec_2d = test_data_tec.reshape(original_shape_tec_test[0], -1)  # 变为 (2208, 71*73)
 
-    print("train_data_tec1:", train_data_tec_2d.shape)
-    print("test_data_tec1:", test_data_tec_2d.shape)
+    train_scaled_tec = scale_tec_aux_data(train_data_tec, tec_scaler, fit_scaler=True)  # 归一化后转变成原来的形状
+    test_scaled_tec = scale_tec_aux_data(test_data_tec, tec_scaler, fit_scaler=False)
 
-    train_scaled_tec = tec_scaler.fit_transform(train_data_tec_2d)
-    train_scaled_aux = aux_scaler.fit_transform(train_data_aux)
-
-    test_scaled_tec = tec_scaler.transform(test_data_tec_2d)
-    test_scaled_aux = aux_scaler.transform(test_data_aux)
-    # print("训练数据方差：", np.var(train_scaled_tec))
-    # print("测试数据方差：", np.var(test_scaled_tec))
-    # exit()
-    #train_scaled_tec = train_scaled_tec.reshape(original_shape_tec_train)  # 归一化后转变成原来的形状
-    test_scaled_tec = test_scaled_tec.reshape(original_shape_tec_test)
-
+    train_scaled_aux = scale_tec_aux_data(train_data_aux, aux_scaler, fit_scaler=True)
+    test_scaled_aux = scale_tec_aux_data(test_data_aux, aux_scaler, fit_scaler=False)
 
     #print("test_scaled_tec:", train_scaled_tec.shape)
     print("test_scaled_aux:", test_scaled_tec.shape)
@@ -188,16 +180,36 @@ def model_predict_only():
 
     #train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+    model = ModelAll(transmit_parameter=3,
+                     history_len=seq_length,
+                     predict_len=1,
+                     d_model=512,
+                     in_dim2=512,
+                     out_dim1=512
+                     ).to(device)
+    model.load_state_dict(torch.load("model_state_dict.pth", map_location=device))
 
-    loaded_model = torch.load("model.pth").to(device)
-    tec_predict = TecPredict(loaded_model,test_dataloader)
-    pre, act = tec_predict()
+    tec_predict = TecPredict(model,test_dataloader)
+    pre, act, batch_in_tec = tec_predict()
     pre,act =inverse_transform_predictions(pre,act,tec_scaler)
     print(pre.shape,act.shape)
-
     pic_show(act,pre)#引用“图片展示”实例
 
 
 if __name__ == "__main__":
-    model_predict_only()
-    #main()
+    a = input("训练模式输入0，推理模式输入1：")
+    if a=="0":
+        print("开始进行训练")
+        main()
+        print("是否要接着推理？")
+        b = input("是否要接着推理？输入1则进行")
+        if b=="1":
+            model_predict_only()
+        else:
+            print("不进行推理，训练结束。")
+
+    elif a=="1":
+        model_predict_only()
+        print("开始进行推理")
+    else:
+        print("输入错误")
