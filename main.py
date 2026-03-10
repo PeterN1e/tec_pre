@@ -143,8 +143,8 @@ def inverse_transform_predictions(predictions,actual,scaler):
     """
     #predictions:由[24,71,73]构成的列表
     #actual[24,71,73]构成的列表
-    pre = predictions[0,:,:,:]
-    act= actual[0,:,:,:]
+    pre = predictions[1,:,:,:]
+    act= actual[1,:,:,:]
 
     original_shape_tec_train = pre.shape
     pre_2d = pre.reshape(original_shape_tec_train[0],-1)

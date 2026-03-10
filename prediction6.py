@@ -29,7 +29,7 @@ class TecPredict(nn.Module):
                 predictions.append(output.cpu().numpy())
                 actuals.append(batch_exp.cpu().numpy())
                 batch_in_tec=batch_in_tec.cpu().numpy()
-                if frame_num==1:
+                if frame_num==2:
                     break
                 frame_num+=1
         return np.array(predictions),np.array(actuals),np.array(batch_in_tec)
