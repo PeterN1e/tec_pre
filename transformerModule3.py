@@ -51,6 +51,10 @@ class TecPreTransformer(nn.Module):
         batch_size = src.shape[0]
 
         src = self.input_projection(src)
+        #print("投影后前两步对比：", torch.allclose(src[0, 0, :], src[0, 1, :]))
+        # 2. 乘以sqrt(d_model)并加上位置编码
+        src = src*math.sqrt(self.d_model)
+
         src = self.pos_encoder(src)
 
         src = self.transformer_encoder(src)
