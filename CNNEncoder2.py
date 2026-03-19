@@ -49,7 +49,8 @@ class CnnEncoder(nn.Module):
 
         #（batch * seq_length,1,71,73）->（batch * seq_length,4 * transmit_parameter * 18 * 19）
         tec = tec.view(batch_size * seq_length,1,4 * self.transmit_parameter * 18 * 19)
-        tec = tec[:,:,0:-4]#直接裁掉最后4个
+        aux_dim = aux.shape[2]
+        tec = tec[:,:,0:-aux_dim]#直接裁掉最后4个
         tec = tec.view(batch_size,seq_length,-1)
         x = torch.cat((aux,tec),dim = -1)
         x = self.fc_tec(x)

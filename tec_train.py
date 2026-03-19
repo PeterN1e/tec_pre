@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import  DataLoader
 import numpy as np
+from config import batch_size
 import os  #处理文件和目录
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import logging  #跟踪程序的运行状态、调试错误以及记录重要信息
@@ -38,6 +39,8 @@ class TrainModel(nn.Module):
     def forward(self,num_epochs):
         train_losses = []
         test_losses=[]
+        logger.info(f'batch_size {batch_size:3d} |'
+                    f'')
 
         for epoch in range(1,num_epochs+1):
             self.model.train()

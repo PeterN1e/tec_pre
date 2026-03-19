@@ -3,7 +3,7 @@ import torch.nn as nn
 from keras import device
 
 
-from config import train_path,test_path,device,batch_size,seq_length,epochs_num
+from config import train_path,test_path,device,batch_size,seq_length,epochs_num,transmit_parameter
 import numpy as np
 from torch.utils.data import Dataset,DataLoader
 from dataloader1 import TecDataset1,data_reader
@@ -100,7 +100,7 @@ def main():
     tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_mae,optimizer=optimizer)
     train_losses, test_losses = tec_train(epochs_num)
 
-    torch.save(model.state_dict(), "model_state_dict.pth")
+    torch.save(model.state_dict(), "transformer_model\\model_state_dict.pth")
     print("the model training is completed and saved")
 
     plt.rcParams['font.sans-serif']=['Microsoft YaHei', 'Arial Unicode MS']  #称之为rc配置或rc参数。通过rc参数可以修改默认的属性，
@@ -180,14 +180,14 @@ def model_predict_only():
 
     #train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
-    model = ModelAll(transmit_parameter=3,
+    model = ModelAll(transmit_parameter=transmit_parameter,
                      history_len=seq_length,
                      predict_len=1,
                      d_model=512,
                      in_dim2=512,
                      out_dim1=512
                      ).to(device)
-    model.load_state_dict(torch.load("model_state_dict.pth", map_location=device))
+    model.load_state_dict(torch.load("transformer_model\\model_state_dict.pth", map_location=device))
 
     tec_predict = TecPredict(model,test_dataloader)
     pre, act, batch_in_tec = tec_predict()
