@@ -27,7 +27,7 @@ def scale_tec_aux_data(data, scaler, fit_scaler=True):
     :return:
     """
     dim = data.ndim
-    if dim == 3:
+    if dim == 3:#标准化三维tec数据
         num, w, h = data.shape
         data_2d = data.reshape(num, w * h)
         if fit_scaler:
@@ -35,14 +35,13 @@ def scale_tec_aux_data(data, scaler, fit_scaler=True):
         else:
             scaled = scaler.transform(data_2d)
         return scaled.reshape(num, w, h)
-    elif dim == 2:
-        num, w = data.shape
-        data_2d = data
+    elif dim == 2:#标准化二维特征数据
+        data_2d = data[:,1:]
         if fit_scaler:
             scaled = scaler.fit_transform(data_2d)
         else:
             scaled = scaler.transform(data_2d)
-        return scaled.reshape(num, w)
+        return np.concatenate((data[:,0].reshape(-1,1),scaled),axis = 1)
     else:
         print("输入维度错误，检查")
         exit()
@@ -61,7 +60,7 @@ def main():
     train_scaled_tec = scale_tec_aux_data(train_data_tec,tec_scaler,fit_scaler=True) #归一化后转变成原来的形状
     test_scaled_tec = scale_tec_aux_data(test_data_tec,tec_scaler,fit_scaler=False)
 
-    train_scaled_aux = scale_tec_aux_data(train_data_aux,aux_scaler,fit_scaler=True)
+    train_scaled_aux = scale_tec_aux_data(train_data_aux[:,],aux_scaler,fit_scaler=True)
     test_scaled_aux = scale_tec_aux_data(test_data_aux,aux_scaler,fit_scaler=False)
 
     print("test_scaled_tec:", train_scaled_tec.shape)
@@ -133,9 +132,12 @@ def main():
     plt.tight_layout()
     plt.show()
 
-def inverse_transform_predictions(predictions,actual,scaler):
+def inverse_transform_predictions(predictions,actual,auxiliary,tec_scaler,aux_scaler):
     """
     作用：对数据进行反标准化，还原至输入状态
+    :param auxiliary:
+    :param aux_scaler:
+    :param tec_scaler:
     :param predictions:预测
     :param actual:实际
     :param scaler:设定的标准化
@@ -143,16 +145,35 @@ def inverse_transform_predictions(predictions,actual,scaler):
     """
     #predictions:由[24,71,73]构成的列表
     #actual[24,71,73]构成的列表
-    pre = predictions[1,:,:,:]
-    act= actual[1,:,:,:]
+    pre_inv = []
+    act_inv = []
+    aux_inv = []
+    #act_inv = []#创建的是列表
+    for i in range(predictions.shape[0]):
+        pre = predictions[i,:,:,:]
+        act= actual[i,:,:,:]
 
-    original_shape_tec_train = pre.shape
-    pre_2d = pre.reshape(original_shape_tec_train[0],-1)
-    original_shape_tec_test = act.shape
-    act_2d = act.reshape(original_shape_tec_test[0],-1)   #将数据转化为一行
-    pre_inv=scaler.inverse_transform(pre_2d).reshape(pre.shape)
-    act_inv=scaler.inverse_transform(act_2d).reshape(act.shape)
-    return pre_inv,act_inv
+        original_shape_tec_train = pre.shape
+        pre_2d = pre.reshape(original_shape_tec_train[0],-1)
+        original_shape_tec_test = act.shape
+        act_2d = act.reshape(original_shape_tec_test[0],-1)   #将数据转化为一行
+        pre_inv_one=tec_scaler.inverse_transform(pre_2d).reshape(pre.shape)
+        act_inv_one=tec_scaler.inverse_transform(act_2d).reshape(act.shape)#返回np数组
+        #进行拼接
+        pre_inv.append(pre_inv_one)
+        act_inv.append(act_inv_one)
+
+    pre_inv = np.stack(pre_inv,axis = 0)#axis等价为torch.stack中的dim
+    act_inv = np.stack(act_inv,axis = 0)
+
+    for i in range(auxiliary.shape[0]):
+        aux = auxiliary[i,:,1:]
+
+        aux_inv_one = aux_scaler.inverse_transform(aux)
+        aux_inv.append(np.concatenate((auxiliary[i,:,0].reshape(-1,1),aux_inv_one),axis = 1))
+
+    aux_inv = np.stack(aux_inv, axis=0)
+    return pre_inv,act_inv,aux_inv
 
 
 def model_predict_only():
@@ -190,10 +211,11 @@ def model_predict_only():
     model.load_state_dict(torch.load("transformer_model\\model_state_dict.pth", map_location=device))
 
     tec_predict = TecPredict(model,test_dataloader)
-    pre, act, batch_in_tec = tec_predict()
-    pre,act =inverse_transform_predictions(pre,act,tec_scaler)
+    pre, act,aux = tec_predict()
+
+    pre,act,aux =inverse_transform_predictions(pre,act,aux,tec_scaler,aux_scaler)
     print(pre.shape,act.shape)
-    pic_show(act,pre)#引用“图片展示”实例
+    pic_show(act[17],pre[17],aux[17])#引用“图片展示”实例
 
 
 if __name__ == "__main__":

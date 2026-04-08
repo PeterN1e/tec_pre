@@ -60,8 +60,8 @@ class TrainModel(nn.Module):
 
 
                 batch_in_tec = batch_in_tec.float().to(device)#转换前的数据类型为float64，为了和之后权重（float32）偏置计算
-                batch_in_aux = batch_in_aux.float().to(device)
-                batch_exp = batch_exp.float().to(device)
+                batch_in_aux = batch_in_aux[:,:,1:].float().to(device)
+                batch_exp = batch_exp[0].float().to(device)
                 #batch_exp(24,71,73)
                 output = self.model(batch_in_tec,batch_in_aux)
 
@@ -84,8 +84,8 @@ class TrainModel(nn.Module):
             with torch.no_grad():
                 for batch_in_tec,batch_in_aux,batch_exp in self.test_loader:
                     batch_in_tec = batch_in_tec.float().cuda()  # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
-                    batch_in_aux = batch_in_aux.float().cuda()
-                    batch_exp = batch_exp.float().cuda()
+                    batch_in_aux = batch_in_aux[:,:,1:].float().cuda()
+                    batch_exp = batch_exp[0].float().cuda()
 
                     outputs = self.model(batch_in_tec,batch_in_aux)
 

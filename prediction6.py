@@ -16,21 +16,21 @@ class TecPredict(nn.Module):
         self.model.eval()
         predictions = []
         actuals = []
+        datetime = []
         with torch.no_grad():
             for batch_in_tec,batch_in_aux,batch_exp in self.test_loader:
                 batch_in_tec = batch_in_tec.float().to(device) #(batch_size,seq_length,71,73)
                 # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
-                batch_in_aux = batch_in_aux.float().to(device)
-                batch_exp = batch_exp.float().to(device)#(batch_size,71,73)
+                batch_in_aux_no_date = batch_in_aux[:,:,1:].float().to(device)
+                batch_exp_tec = batch_exp[0].float().to(device)#(batch_size,71,73)
+                batch_exp_aux = batch_exp[1].float().to(device)  # (batch_size,71,73)
 
-
-                output = self.model(batch_in_tec,batch_in_aux)#(batch_size,71,73)
+                output = self.model(batch_in_tec,batch_in_aux_no_date)#(batch_size,71,73)
+                frame_num+=1
                 print(f"预测第{frame_num}组")
                 predictions.append(output.cpu().numpy())
-                actuals.append(batch_exp.cpu().numpy())
-                batch_in_tec=batch_in_tec.cpu().numpy()
-                if frame_num==2:
-                    break
-                frame_num+=1
-        return np.array(predictions),np.array(actuals),np.array(batch_in_tec)
+                actuals.append(batch_exp_tec.cpu().numpy())
+                datetime.append(batch_exp_aux.cpu().numpy())
+
+        return np.array(predictions),np.array(actuals),np.array(datetime)
 

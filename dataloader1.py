@@ -11,7 +11,7 @@ import pandas as pd  #分析结构化数据
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
-import numpy as np
+
 
 
 def detect_all_same_value(tec_data: np.ndarray) -> list:
@@ -44,6 +44,9 @@ def detect_all_same_value(tec_data: np.ndarray) -> list:
 
 
 class TecDataset1(Dataset):
+    """
+    输出：tec图[前seq_length张]，特征数据[前seq_length张]，（tec图[下一张]，特征数据[下一张]）
+    """
     def __init__(self,data_tec,data_aux,seq_length):
         super().__init__()
         self.data_aux = data_aux.astype(np.float32)
@@ -52,7 +55,7 @@ class TecDataset1(Dataset):
     def __len__(self):
         return len(self.data_tec)-self.seq_length
     def __getitem__(self, index):
-        return self.data_tec[index:index+self.seq_length],self.data_aux[index:index+self.seq_length],self.data_tec[index+self.seq_length]
+        return self.data_tec[index:index+self.seq_length],self.data_aux[index:index+self.seq_length],[self.data_tec[index+self.seq_length],self.data_aux[index+self.seq_length]]
 
 
 def data_reader(data_path):
@@ -69,11 +72,13 @@ def data_reader(data_path):
             tec_batch.append(tec[h])
 
     feature_list = pd.read_csv(feature_path_all)
+    feature_list["datetime"] = pd.to_datetime(feature_list["datetime"]).dt.strftime('%Y%m%d')
+    #将原先datatime数据更改格式
     tec_batch = np.array(tec_batch)
-    aux = ["hour","ssn","dst","f10.7"]
+    aux = ["datetime","hour","ssn","dst","f10.7"]
     #detect_all_same_value(tec_batch)
 
-    return tec_batch,np.array(feature_list[aux].values)
+    return tec_batch,np.array(feature_list[aux].values) #np.array可接受字符串，数字 布尔类型
 
 
 
