@@ -50,7 +50,8 @@ def pic_show(act,pre,aux):
         ax3 = fig.add_subplot(gs[2, i])
         im3 = ax3.pcolormesh(lon, lat, error[i, :, :], shading='auto', cmap='jet', vmin=-vmax_error, vmax=vmax_error)
         plt.colorbar(im3,ax = ax3,label='TECU',shrink=1)
-        average = f"mae:{np.mean(error[i, :, :]):.3f}"
+        average = np.mean(np.abs(error[i, :, :]))#
+
         plt.title("差值图", loc='left', fontsize=14)
         plt.title(average, loc='center',fontsize=14)
 
