@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 
-
+plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
+plt.rcParams['axes.unicode_minus'] = False
 def pic_show(act,pre,aux,delta):
     """
     :param delta:
@@ -12,11 +13,6 @@ def pic_show(act,pre,aux,delta):
 
     :return: 图片
     """
-
-    ################
-    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
-    plt.rcParams['axes.unicode_minus'] = False
-
     lat = np.arange(87.5, -90, -2.5)
     lon = np.arange(-180, 185, 5)
     picture_num = act.shape[0]
@@ -58,13 +54,18 @@ def pic_show(act,pre,aux,delta):
 
     plt.show()
 def datagram(data):
-    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
-    plt.rcParams['axes.unicode_minus'] = False
-    x = np.arange(0,data.shape[0],1)
+    x = np.arange(0, data.shape[0], 1)
     y = data
+    y_mean = np.mean(y)
+
     plt.figure(figsize=(15, 4))
-    plt.plot(x,y)
+    plt.plot(x, y, label='误差', color='steelblue', linewidth=1)
+    plt.axhline(y=y_mean, color='r', linestyle='--', linewidth=2, label=f'均值: {y_mean:.2f}')
+
     plt.xlabel('天')
     plt.ylabel('差值/TECU')
     plt.title('误差变化曲线')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
     plt.show()
