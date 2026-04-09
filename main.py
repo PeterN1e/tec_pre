@@ -229,7 +229,6 @@ if __name__ == "__main__":
     if a=="0":
         print("开始进行训练")
         main()
-        print("是否要接着推理？")
         b = input("是否要接着推理？输入1则进行")
         if b=="1":
             model_predict_only()
