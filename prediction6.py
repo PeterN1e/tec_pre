@@ -26,8 +26,8 @@ class TecPredict(nn.Module):
                 batch_exp_aux = batch_exp[1].float().to(device)  # (batch_size,71,73)
 
                 output = self.model(batch_in_tec,batch_in_aux_no_date)#(batch_size,71,73)
-                frame_num+=1
                 print(f"预测第{frame_num}组")
+                frame_num += 1
                 predictions.append(output.cpu().numpy())
                 actuals.append(batch_exp_tec.cpu().numpy())
                 datetime.append(batch_exp_aux.cpu().numpy())
