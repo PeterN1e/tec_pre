@@ -8,7 +8,7 @@ import numpy as np
 from torch.utils.data import Dataset,DataLoader
 from dataloader1 import TecDataset1,data_reader
 from tec_train import TrainModel
-from pic_show7 import pic_show
+from pic_show7 import pic_show,datagram
 import torch.optim as optim
 import warnings
 from sklearn.preprocessing import MinMaxScaler
@@ -132,48 +132,37 @@ def main():
     plt.tight_layout()
     plt.show()
 
-def inverse_transform_predictions(predictions,actual,auxiliary,tec_scaler,aux_scaler):
+def inverse_transform_predictions(data,scaler):
     """
     作用：对数据进行反标准化，还原至输入状态
-    :param auxiliary:
-    :param aux_scaler:
-    :param tec_scaler:
-    :param predictions:预测
-    :param actual:实际
+    :param data:
     :param scaler:设定的标准化
     :return:
     """
     #predictions:由[24,71,73]构成的列表
     #actual[24,71,73]构成的列表
-    pre_inv = []
-    act_inv = []
-    aux_inv = []
+    data_inv = []
     #act_inv = []#创建的是列表
-    for i in range(predictions.shape[0]):
-        pre = predictions[i,:,:,:]
-        act= actual[i,:,:,:]
+    dim = data.ndim
+    if dim == 4:#说明传入的数据是 标准化后的tec图
+        for i in range(data.shape[0]):
+            data_cell = data[i,:,:,:]
 
-        original_shape_tec_train = pre.shape
-        pre_2d = pre.reshape(original_shape_tec_train[0],-1)
-        original_shape_tec_test = act.shape
-        act_2d = act.reshape(original_shape_tec_test[0],-1)   #将数据转化为一行
-        pre_inv_one=tec_scaler.inverse_transform(pre_2d).reshape(pre.shape)
-        act_inv_one=tec_scaler.inverse_transform(act_2d).reshape(act.shape)#返回np数组
-        #进行拼接
-        pre_inv.append(pre_inv_one)
-        act_inv.append(act_inv_one)
-
-    pre_inv = np.stack(pre_inv,axis = 0)#axis等价为torch.stack中的dim
-    act_inv = np.stack(act_inv,axis = 0)
-
-    for i in range(auxiliary.shape[0]):
-        aux = auxiliary[i,:,1:]
-
-        aux_inv_one = aux_scaler.inverse_transform(aux)
-        aux_inv.append(np.concatenate((auxiliary[i,:,0].reshape(-1,1),aux_inv_one),axis = 1))
-
-    aux_inv = np.stack(aux_inv, axis=0)
-    return pre_inv,act_inv,aux_inv
+            original_shape = data_cell.shape
+            data_cell_2d = data_cell.reshape(original_shape[0],-1)#将数据转化为一行
+            data_inv_one=scaler.inverse_transform(data_cell_2d).reshape(original_shape)
+            #进行拼接
+            data_inv.append(data_inv_one)
+        data_inv = np.stack(data_inv,axis = 0)#axis等价为torch.stack中的dim
+    elif dim == 3:#说明传入的数据是 特征参数
+        for i in range(data.shape[0]):
+            aux = data[i,:,1:]
+            data_inv_one = scaler.inverse_transform(aux)
+            data_inv.append(np.concatenate((data[i,:,0].reshape(-1,1),data_inv_one),axis = 1))
+        data_inv = np.stack(data_inv, axis=0)
+    else:
+        print("反标准化时参数维度传入错误")
+    return data_inv
 
 
 def model_predict_only():
@@ -211,15 +200,22 @@ def model_predict_only():
     model.load_state_dict(torch.load("transformer_model\\model_state_dict.pth", map_location=device))
 
     tec_predict = TecPredict(model,test_dataloader)
-    pre, act,aux = tec_predict()
+    pre, act,aux,delta= tec_predict()
+    pre = inverse_transform_predictions(pre,tec_scaler)
+    act = inverse_transform_predictions(act,tec_scaler)
+    aux = inverse_transform_predictions(aux,aux_scaler)
+    delta = inverse_transform_predictions(delta,tec_scaler)
 
-    pre,act,aux =inverse_transform_predictions(pre,act,aux,tec_scaler,aux_scaler)
+    delta_abs = np.abs(delta)   #计算绝对值
+    delta_average_one_hour = np.mean(delta_abs,axis =(2, 3) )#对单张差值取平均值
+    delta_average_one_day = np.mean(delta_average_one_hour,axis = 1)
+    datagram(delta_average_one_day)
     print(pre.shape,act.shape)
     print("预测完成")
     for i in range(10): #允许检索10次
         retrival = int(input(f"输入检索值0~{pre.shape[0]-1}："))#输入的字符转换为数字
         if 0<=retrival<pre.shape[0]:
-            pic_show(act[retrival], pre[retrival], aux[retrival])  # 引用“图片展示”实例
+            pic_show(act[retrival], pre[retrival], aux[retrival],delta[retrival])  # 引用“图片展示”实例
             print("完成绘制")
         else:
             print("输入错误")

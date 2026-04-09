@@ -3,8 +3,9 @@ import numpy as np
 from matplotlib.gridspec import GridSpec
 
 
-def pic_show(act,pre,aux):
+def pic_show(act,pre,aux,delta):
     """
+    :param delta:
     :param aux:
     :param pre: 接收格式为：(num,71,73)
     :param act: 接收格式为：(num,71,73)
@@ -15,10 +16,10 @@ def pic_show(act,pre,aux):
     ################
     plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
     plt.rcParams['axes.unicode_minus'] = False
+
     lat = np.arange(87.5, -90, -2.5)
     lon = np.arange(-180, 185, 5)
     picture_num = act.shape[0]
-    error = act - pre
     fig = plt.figure(figsize=(250, 15))
     # 使用 GridSpec 精确控制比例
     # width_ratios=[1]*24 → 24列等宽
@@ -29,7 +30,7 @@ def pic_show(act,pre,aux):
                   wspace=0.15,  # 水平间距
                   hspace=0.3)
     vmax_tec = np.max(act)
-    vmax_error = np.max(error)
+    vmax_error = np.max(delta)
     for i in range(picture_num):
         ax1 = fig.add_subplot(gs[0, i])#使用行列引索
         im1 =ax1.pcolormesh(lon, lat, act[i, :, :], shading='auto', cmap='jet', vmin=0, vmax=vmax_tec)
@@ -48,18 +49,22 @@ def pic_show(act,pre,aux):
         plt.title("预测图", loc='left', fontsize=14)
 
         ax3 = fig.add_subplot(gs[2, i])
-        im3 = ax3.pcolormesh(lon, lat, error[i, :, :], shading='auto', cmap='jet', vmin=-vmax_error, vmax=vmax_error)
+        im3 = ax3.pcolormesh(lon, lat, delta[i, :, :], shading='auto', cmap='jet', vmin=-vmax_error, vmax=vmax_error)
         plt.colorbar(im3,ax = ax3,label='TECU',shrink=1)
-        average = np.mean(np.abs(error[i, :, :]))#
+        average = np.mean(np.abs(delta[i, :, :]))#
 
         plt.title("差值图", loc='left', fontsize=14)
         plt.title(average, loc='center',fontsize=14)
 
-
-    # fig.text(0.01, 0.83, 'TEC Actual', ha='left', va='center',
-    #          rotation='vertical', fontsize=12, fontweight='bold')
-    # fig.text(0.01, 0.50, 'TEC Predicted', ha='left', va='center',
-    #          rotation='vertical', fontsize=12, fontweight='bold')
-    # fig.text(0.01, 0.17, 'TEC Error', ha='left', va='center',
-    #          rotation='vertical', fontsize=12, fontweight='bold')
+    plt.show()
+def datagram(data):
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
+    plt.rcParams['axes.unicode_minus'] = False
+    x = np.arange(0,data.shape[0],1)
+    y = data
+    plt.figure(figsize=(15, 4))
+    plt.plot(x,y)
+    plt.xlabel('天')
+    plt.ylabel('差值/TECU')
+    plt.title('误差变化曲线')
     plt.show()
