@@ -37,8 +37,8 @@ def pic_show(act,pre,aux,delta):
 
         plt.colorbar(im1,ax = ax1,label='TECU',shrink=1)
         title_right = f"SSN:{aux[i,2]:.0f}|  DST:{aux[i,3]:.0f}|  F10.7:{aux[i,4]:.1f}"
-        plt.title(title_right,loc = 'right',fontsize=14)
-        plt.title("真实图",loc = 'left', fontsize=14)
+        plt.title(title_right,loc = 'right',fontsize=20)
+        plt.title("真实图",loc = 'left', fontsize=20)
 
 
         ax2 = fig.add_subplot(gs[1, i])
@@ -46,15 +46,15 @@ def pic_show(act,pre,aux,delta):
         #shrink = 0.8：colorbar高度压缩为子图高度的80 %
         #pad = 0.02：colorbar与子图的间距
         plt.colorbar(im2,ax = ax2,label='TECU',shrink=1)
-        plt.title("预测图", loc='left', fontsize=14)
+        plt.title("预测图", loc='left', fontsize=20)
 
         ax3 = fig.add_subplot(gs[2, i])
         im3 = ax3.pcolormesh(lon, lat, delta[i, :, :], shading='auto', cmap='jet', vmin=-vmax_error, vmax=vmax_error)
         plt.colorbar(im3,ax = ax3,label='TECU',shrink=1)
         average = np.mean(np.abs(delta[i, :, :]))#
 
-        plt.title("差值图", loc='left', fontsize=14)
-        plt.title(average, loc='center',fontsize=14)
+        plt.title("差值图", loc='left', fontsize=20)
+        plt.title(average, loc='center',fontsize=20)
 
     plt.show()
 def datagram(data):
