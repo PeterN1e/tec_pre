@@ -215,7 +215,18 @@ def model_predict_only():
 
     pre,act,aux =inverse_transform_predictions(pre,act,aux,tec_scaler,aux_scaler)
     print(pre.shape,act.shape)
-    pic_show(act[17],pre[17],aux[17])#引用“图片展示”实例
+    print("预测完成")
+
+    retrival = input("输入检索值：")
+    for i in range(10): #允许检索10次
+        retrival = int(input(f"输入检索值0~{pre.shape[0]-1}："))#输入的字符转换为数字
+        if 0<=retrival<pre.shape[0]:
+            pic_show(act[retrival], pre[retrival], aux[retrival])  # 引用“图片展示”实例
+            print("完成绘制")
+        else:
+            print("输入错误")
+
+
 
 
 if __name__ == "__main__":
