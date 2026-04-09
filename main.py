@@ -219,6 +219,7 @@ def model_predict_only():
             print("完成绘制")
         else:
             print("输入错误")
+            break
 
 
 
@@ -236,7 +237,7 @@ if __name__ == "__main__":
             print("不进行推理，训练结束。")
 
     elif a=="1":
-        model_predict_only()
         print("开始进行推理")
+        model_predict_only()
     else:
         print("输入错误")
