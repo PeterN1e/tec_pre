@@ -11,38 +11,6 @@ def pic_show(act,pre,aux):
 
     :return: 图片
     """
-    # lat = np.arange(87.5, -90, -2.5)
-    # lon = np.arange(-180, 185, 5)
-    # picture_num = act.shape[0]
-    # error = pre - act
-    # plt.figure(figsize=(150, 15))
-    # for i in range(picture_num):
-    #
-    #     plt.subplot(2, 12, i+1)
-    #     plt.pcolormesh(lon,lat,act[i-1, :, :], shading='auto', cmap='jet',vmin = 0, vmax = 120)
-    #     plt.colorbar(label='TECU')
-    #     plt.title("tec act")
-    # plt.show()
-    #
-    # picture_num = pre.shape[0]
-    # plt.figure(figsize=(160, 10))
-    # for i in range(picture_num):
-    #     plt.subplot(2, 12, i + 1)
-    #     plt.pcolormesh(lon,lat,pre[i - 1, :, :], shading='auto', cmap='jet',vmin = 0, vmax = 120)
-    #     plt.colorbar(label='TECU')
-    #     plt.title("tec pre")
-    #     # plt.savefig(f'tecUHR_{0}.png', dpi=150)
-    # plt.show()
-    #
-    # picture_num = error.shape[0]
-    # plt.figure(figsize=(160, 10))
-    # for i in range(picture_num):
-    #     plt.subplot(2, 12, i + 1)
-    #     plt.pcolormesh(lon,lat,error[i - 1, :, :], shading='auto', cmap='jet',vmin = -20, vmax = 20)
-    #     plt.colorbar(label='TECU')
-    #     plt.title("tec error")
-    #     # plt.savefig(f'tecUHR_{0}.png', dpi=150)
-    # plt.show()
 
     ################
     plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
@@ -50,7 +18,7 @@ def pic_show(act,pre,aux):
     lat = np.arange(87.5, -90, -2.5)
     lon = np.arange(-180, 185, 5)
     picture_num = act.shape[0]
-    error = pre - act
+    error = act - pre
     fig = plt.figure(figsize=(250, 15))
     # 使用 GridSpec 精确控制比例
     # width_ratios=[1]*24 → 24列等宽
