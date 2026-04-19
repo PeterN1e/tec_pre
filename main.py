@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 from keras import device
-
-
 from config import train_path,test_path,device,batch_size,seq_length,epochs_num,transmit_parameter
 import numpy as np
 from torch.utils.data import Dataset,DataLoader
@@ -36,12 +34,14 @@ def scale_tec_aux_data(data, scaler, fit_scaler=True):
             scaled = scaler.transform(data_2d)
         return scaled.reshape(num, w, h)
     elif dim == 2:#标准化二维特征数据
-        data_2d = data[:,1:]
+        #data_2d = data[:,1:]
+        data_2d = data
         if fit_scaler:
             scaled = scaler.fit_transform(data_2d)
         else:
             scaled = scaler.transform(data_2d)
-        return np.concatenate((data[:,0].reshape(-1,1),scaled),axis = 1)
+        #return np.concatenate((data[:,0].reshape(-1,1),scaled),axis = 1)
+        return scaled
     else:
         print("输入维度错误，检查")
         exit()
@@ -52,15 +52,16 @@ def main():
     warnings.filterwarnings('ignore')
     print(f"使用设备：{device}")
     train_data_tec, train_data_aux= data_reader(train_path)
+    print("训练集装载完毕")
     test_data_tec, test_data_aux= data_reader(test_path)
-
+    print("测试集装载完毕")
     tec_scaler = MinMaxScaler()#不同数据缩放器不允许共同使用
     aux_scaler = MinMaxScaler()
 
     train_scaled_tec = scale_tec_aux_data(train_data_tec,tec_scaler,fit_scaler=True) #归一化后转变成原来的形状
     test_scaled_tec = scale_tec_aux_data(test_data_tec,tec_scaler,fit_scaler=False)
 
-    train_scaled_aux = scale_tec_aux_data(train_data_aux[:,],aux_scaler,fit_scaler=True)
+    train_scaled_aux = scale_tec_aux_data(train_data_aux,aux_scaler,fit_scaler=True)
     test_scaled_aux = scale_tec_aux_data(test_data_aux,aux_scaler,fit_scaler=False)
 
     print("test_scaled_tec:", train_scaled_tec.shape)
@@ -156,9 +157,10 @@ def inverse_transform_predictions(data,scaler):
         data_inv = np.stack(data_inv,axis = 0)#axis等价为torch.stack中的dim
     elif dim == 3:#说明传入的数据是 特征参数
         for i in range(data.shape[0]):
-            aux = data[i,:,1:]
+            aux = data[i,:,:]
             data_inv_one = scaler.inverse_transform(aux)
-            data_inv.append(np.concatenate((data[i,:,0].reshape(-1,1),data_inv_one),axis = 1))
+            #data_inv.append(np.concatenate((data[i,:,0].reshape(-1,1),data_inv_one),axis = 1))
+            data_inv.append(data_inv_one)
         data_inv = np.stack(data_inv, axis=0)
     else:
         print("反标准化时参数维度传入错误")

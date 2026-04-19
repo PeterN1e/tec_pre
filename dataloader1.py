@@ -13,7 +13,6 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 
 
-
 def detect_all_same_value(tec_data: np.ndarray) -> list:
     """
     检测71x73矩阵中所有元素为同一值（方差=0）的异常数据
@@ -71,11 +70,16 @@ def data_reader(data_path):
         for h in range(tec.shape[0]):
             tec_batch.append(tec[h])
 
-    feature_list = pd.read_csv(feature_path_all)
-    feature_list["datetime"] = pd.to_datetime(feature_list["datetime"]).dt.strftime('%Y%m%d')
+    with open(feature_path_all, 'rb') as f:
+        header = f.read(4)
+    if header == b'PK\x03\x04':
+        feature_list = pd.read_excel(feature_path_all)
+    else:
+        feature_list = pd.read_csv(feature_path_all)
+
     #将原先datatime数据更改格式
     tec_batch = np.array(tec_batch)
-    aux = ["datetime","hour","ssn","dst","f10.7"]
+    aux = ["doy","hour","ssn","dst","f10.7"]
     #detect_all_same_value(tec_batch)
 
     return tec_batch,np.array(feature_list[aux].values) #np.array可接受字符串，数字 布尔类型
