@@ -5,7 +5,6 @@ import PIL.Image as Image
 from torch.utils.data import Dataset,DataLoader
 from os import listdir
 import os
-import torch
 import numpy as np
 import pandas as pd  #分析结构化数据
 

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from keras import device
 from config import train_path,test_path,device,batch_size,seq_length,epochs_num,transmit_parameter
 import numpy as np
 from torch.utils.data import Dataset,DataLoader
@@ -13,8 +12,6 @@ from sklearn.preprocessing import MinMaxScaler
 from model_all import ModelAll
 import matplotlib.pyplot as plt
 from prediction6 import TecPredict
-import cdflib
-
 
 def scale_tec_aux_data(data, scaler, fit_scaler=True):
     """
