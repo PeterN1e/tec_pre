@@ -12,6 +12,8 @@ from sklearn.preprocessing import MinMaxScaler
 from model_all import ModelAll
 import matplotlib.pyplot as plt
 from prediction6 import TecPredict
+from Comparison8 import data_save
+
 
 def scale_tec_aux_data(data, scaler, fit_scaler=True):
     """
@@ -178,16 +180,11 @@ def model_predict_only():
 
     train_scaled_aux = scale_tec_aux_data(train_data_aux, aux_scaler, fit_scaler=True)
     test_scaled_aux = scale_tec_aux_data(test_data_aux, aux_scaler, fit_scaler=False)
-
-    #print("test_scaled_tec:", train_scaled_tec.shape)
     print("test_scaled_aux:", test_scaled_tec.shape)
-    #print("train_scaled_tec:", train_scaled_aux.shape)
     print("test_scaled_tec:", test_scaled_aux.shape)
 
-    #train_dataset = TecDataset1(train_scaled_tec, train_scaled_aux, seq_length=seq_length)
     test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length=seq_length)
 
-    #train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
     model = ModelAll(transmit_parameter=transmit_parameter,
                      history_len=seq_length,
@@ -205,10 +202,13 @@ def model_predict_only():
     aux = inverse_transform_predictions(aux,aux_scaler)
     delta = inverse_transform_predictions(delta,tec_scaler)
 
+    data_save(delta)
+
     delta_abs = np.abs(delta)   #计算绝对值
     delta_average_one_hour = np.mean(delta_abs,axis =(2, 3) )#对单张差值取平均值
     delta_average_one_day = np.mean(delta_average_one_hour,axis = 1)
     datagram(delta_average_one_day)
+
     print(pre.shape,act.shape)
     print("预测完成")
     for i in range(10): #允许检索10次
@@ -233,9 +233,13 @@ if __name__ == "__main__":
             model_predict_only()
         else:
             print("不进行推理，训练结束。")
-
+            exit()
     elif a=="1":
         print("开始进行推理")
         model_predict_only()
+        c = input("开始数据分析输入：0")
+        if c=="0":
+            exit()
+
     else:
         print("输入错误")

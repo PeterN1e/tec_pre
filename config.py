@@ -14,6 +14,7 @@ epochs_num = 10
 batch_size = 24
 seq_length = 6    #一个batch序列时间步数
 
+model_name = "transformer"
 
 ######### transformerModule3
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
