@@ -193,7 +193,7 @@ def model_predict_only():
                      in_dim2=512,
                      out_dim1=512
                      ).to(device)
-    model.load_state_dict(torch.load("transformer_model\\model_state_dict.pth", map_location=device))
+    model.load_state_dict(torch.load("transformer_model\\model_state_dict.pth", map_location=device,weights_only=True))
 
     tec_predict = TecPredict(model,test_dataloader)
     pre, act,aux,delta= tec_predict()

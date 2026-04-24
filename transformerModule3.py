@@ -37,7 +37,9 @@ class TecPreTransformer(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(
                 encoder_layer,
                 num_layers=num_encoder_layers,
-                norm=nn.LayerNorm(d_model))
+                norm=nn.LayerNorm(d_model),
+                enable_nested_tensor=False
+        )
 
         self.output_projection = nn.Linear(d_model, 4104)  #映射回所需长度
         # self.output_projection = nn.Sequential(
