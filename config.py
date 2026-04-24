@@ -1,7 +1,9 @@
 #########dataloader1.py
-train_path = "D:\\Dataset______________\\tec\\2011\\TrainDataset" #tec图cdf文件夹路径
-#由于第一天的数据错误
-test_path = "D:\\Dataset______________\\tec\\2011\\TestDataset"#特征路径
+dataset_year = 2011#使用数据集的年份
+train_path = f"D:\\Dataset______________\\tec\\{dataset_year}\\TrainDataset" #tec图cdf文件夹路径
+test_path = f"D:\\Dataset______________\\tec\\{dataset_year}\\TestDataset"
+val_path = "D:\\Dataset______________\\tec\\2012\\ValDataset"
+
 day_seq = 1 #定义一个batch_size由多少天的数据构成
 #########CNNEncoder2.py
 transmit_parameter = 3  #卷积编码层的通道数大小
