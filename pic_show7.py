@@ -10,7 +10,6 @@ def pic_show(act,pre,aux,delta):
     :param aux:
     :param pre: 接收格式为：(num,71,73)
     :param act: 接收格式为：(num,71,73)
-
     :return: 图片
     """
     lat = np.arange(87.5, -90, -2.5)
@@ -50,18 +49,30 @@ def pic_show(act,pre,aux,delta):
         average = np.mean(np.abs(delta[i, :, :]))#
 
         plt.title("差值图", loc='left', fontsize=20)
-        plt.title(average, loc='center',fontsize=20)
+        plt.title(f"{average}", loc='center',fontsize=20)
 
     plt.show()
-def datagram(data):
-    x = np.arange(0, data.shape[0], 1)
-    y = data
-    y_mean = np.mean(y)
+def datagram(data,label=None):
+    colors = ['r','g','b','c','y']
+    x = np.arange(0, data.shape[-1], 1)#定义x轴长度
+
 
     plt.figure(figsize=(15, 4))
-    plt.plot(x, y, label='误差', color='steelblue', linewidth=1)
-    plt.axhline(y=y_mean, color='r', linestyle='--', linewidth=2, label=f'均值: {y_mean:.2f}')
-
+    if data.ndim==2:
+        for i in range(len(data)):
+            y = data[i]
+            y_mean = float(np.mean(y))
+            #label='误差'
+            plt.plot(x, y, color=colors[i], linewidth=1)
+            plt.axhline(y=y_mean, color=colors[i], linestyle='--', linewidth=2, label=f'{label[i]}均值: {y_mean:.2f}')
+    elif data.ndim==1:
+        y = data
+        y_mean = float(np.mean(y))
+        plt.plot(x, y, label='误差', color='steelblue', linewidth=1)
+        plt.axhline(y=y_mean, color='r', linestyle='--', linewidth=2, label=f'均值: {y_mean:.2f}')
+    else:
+        print("datagram作图处，传入维度错误")
+        exit()
     plt.xlabel('天')
     plt.ylabel('差值/TECU')
     plt.title('误差变化曲线')
