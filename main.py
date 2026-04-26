@@ -66,7 +66,7 @@ def main():
 
     print("开始训练模型...")
 
-    tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_mae,optimizer=optimizer)
+    tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_mse,optimizer=optimizer)
     train_losses, test_losses = tec_train(epochs_num)
 
     torch.save(model.state_dict(), "transformer_model\\model_state_dict.pth")

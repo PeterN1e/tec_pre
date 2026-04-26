@@ -14,7 +14,7 @@ out_dim = 128            #卷积编码层最终线性层的输出维度
 import torch
 epochs_num = 10
 batch_size = 24
-seq_length = 24    #一个batch序列时间步数
+seq_length = 6    #一个batch序列时间步数
 pred_length = 1    #所预测的时间步
 
 model_name = "transformer"
