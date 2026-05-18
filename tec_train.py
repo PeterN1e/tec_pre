@@ -1,17 +1,12 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import  DataLoader
-import numpy as np
-from config import batch_size
+from config import model_name,batch_size,device,seq_length,pred_length,dataset_year
 import os  #处理文件和目录
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import logging  #跟踪程序的运行状态、调试错误以及记录重要信息
-from config import device
 
 # 导入进度条模块，tqdm可以让我们在训练过程中看到每个epoch的进度
 from tqdm import tqdm
-from typing import Optional,Dict,List,Any
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
@@ -39,8 +34,11 @@ class TrainModel(nn.Module):
     def forward(self,num_epochs):
         train_losses = []
         test_losses=[]
-        logger.info(f'batch_size {batch_size:3d} |'
-                    f'')
+        logger.info(f'------batch_size {batch_size:3d}| '
+                    f'model: {model_name}| '
+                    f'seq_length:{seq_length:3d}to pred_length|{pred_length:3d}'
+                    f'所用数据集:{dataset_year:3d}'
+                    )
 
         for epoch in range(1,num_epochs+1):
             self.model.train()
@@ -51,13 +49,6 @@ class TrainModel(nn.Module):
                         desc=f'Epoch {epoch}/{num_epochs}',
                         leave=False)
             for batch_in_tec,batch_in_aux,batch_exp in pbar:
-                """
-                batch_in是输入模型的输入，batch_exp：用于计算模型的损失，期待的输出
-                out是模型产生的输出 
-                batch_in_tec: torch.Size([batch_size, 24, 71, 73])
-                batch_in_aux: torch.Size([batch_size, 24, 4])
-                """
-
 
                 batch_in_tec = batch_in_tec.float().to(device)#转换前的数据类型为float64，为了和之后权重（float32）偏置计算
                 batch_in_aux = batch_in_aux.float().to(device)
