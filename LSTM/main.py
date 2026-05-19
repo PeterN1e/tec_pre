@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from Transformer.config import train_path,test_path,device,batch_size,seq_length,epochs_num,transmit_parameter
+from config import train_path,test_path,device,batch_size,seq_length,epochs_num, model_name,lr
 import numpy as np
 from torch.utils.data import DataLoader
 from common.dataloader1 import TecDataset1,data_reader
@@ -9,11 +9,11 @@ from common.pic_show7 import pic_show,datagram
 import torch.optim as optim
 import warnings
 from sklearn.preprocessing import MinMaxScaler
-from Transformer.model_all import ModelAll
+from LSTM.convLSTM.model_all import ModelAll
 import matplotlib.pyplot as plt
-from common.prediction6 import TecPredict
-from common.DataProcessing8 import data_save
-from common.Data_Preprocessing import scale_tec_aux_data,inverse_transform_predictions
+from prediction6 import TecPredict
+from DataProcessing8 import data_save
+from Data_Preprocessing import scale_tec_aux_data,inverse_transform_predictions
 
 def main():
     torch.manual_seed(42)  # 42是生命、宇宙和一切终极问题的答案
@@ -50,8 +50,8 @@ def main():
     model = ModelAll(transmit_parameter=3,
                      history_len=seq_length,
                      predict_len=1,
-                     d_model=512,
-                     in_dim2=512,
+                     in_channel2=12,
+                     hidden_channel2=12,
                      out_dim1=512
                      ).to(device)
     model = model.to(device)
@@ -60,16 +60,16 @@ def main():
     criterion_mae = nn.L1Loss()
     criterion_l1smooth = nn.SmoothL1Loss()
 
-    optimizer=optim.Adam(model.parameters(),lr=0.001)   #优化器对象
+    optimizer=optim.Adam(model.parameters(),lr=lr)   #优化器对象
     print("基础模型创建完成!")
     print(f"模型参数量:{sum(p.numel() for p in model.parameters() ):}")
 
     print("开始训练模型...")
 
-    tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_mse,optimizer=optimizer)
+    tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_mae,optimizer=optimizer)
     train_losses, test_losses = tec_train(epochs_num)
 
-    torch.save(model.state_dict(), "transformer_model\\model_state_dict.pth")
+    torch.save(model.state_dict(), f"convlstm_model\\{model_name}.pth")
     print("the model training is completed and saved")
 
     plt.rcParams['font.sans-serif']=['Microsoft YaHei', 'Arial Unicode MS']  #称之为rc配置或rc参数。通过rc参数可以修改默认的属性，
@@ -123,14 +123,14 @@ def model_predict_only():
     test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length=seq_length)
 
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
-    model = ModelAll(transmit_parameter=transmit_parameter,
+    model = ModelAll(transmit_parameter=3,
                      history_len=seq_length,
                      predict_len=1,
-                     d_model=512,
-                     in_dim2=512,
+                     in_channel2=12,
+                     hidden_channel2=12,
                      out_dim1=512
                      ).to(device)
-    model.load_state_dict(torch.load("transformer_model\\model_state_dict.pth", map_location=device,weights_only=True))
+    model.load_state_dict(torch.load(f"convlstm_model\\{model_name}.pth", map_location=device,weights_only=True))
 
     tec_predict = TecPredict(model,test_dataloader)
     pre, act,aux,delta= tec_predict()
@@ -142,6 +142,7 @@ def model_predict_only():
     data_save(delta)
 
     delta_abs = np.abs(delta)   #计算绝对值
+
     delta_average_one_hour = np.mean(delta_abs,axis =(2, 3) )#对单张差值取平均值
     delta_average_one_day = np.mean(delta_average_one_hour,axis = 1)
     datagram(delta_average_one_day)
@@ -156,7 +157,6 @@ def model_predict_only():
         else:
             print("输入错误")
             break
-
 
 
 

@@ -19,6 +19,6 @@ class TrainConfig:
     epochs_num: int = 10
     batch_size: int = 24
     seq_length: int = 24
-    pred_length : int = 1
+    pred_length : int = 1 
     lr : float = 1e-3
 

@@ -1,23 +1,26 @@
 from CNNDecoder4 import CnnDecoder
 from CNNEncoder2 import CnnEncoder
-from Transformer.transformerModule3 import TecPreTransformer
+from LSTM.convLSTM.convLSTM3 import ConvLSTM
 import torch.nn as nn
 class ModelAll(nn.Module):
     def __init__(self,transmit_parameter,out_dim1,
-              predict_len,history_len,in_dim2,d_model):
+              predict_len,history_len,in_channel2,hidden_channel2):
         """
 
         :param transmit_parameter:
         :param out_dim1:
         :param predict_len:
         :param history_len:
-        :param in_dim2:
-        :param d_model:
+
         """
         super().__init__()
+        self.history_len = history_len
+        self.transmit_parameter = transmit_parameter
         self.encoder = CnnEncoder(transmit_parameter=transmit_parameter,
                              out_dim=out_dim1)
-        self.predictor = TecPreTransformer(in_dim=in_dim2,history_len= history_len,predict_len= predict_len,d_model=d_model)
+        self.predictor = ConvLSTM(in_channels=in_channel2,
+                                    hidden_channels =hidden_channel2,
+                                    pred_len=predict_len)
         self.decoder = CnnDecoder(transmit_parameter_de=transmit_parameter)
         self._reset_parameters()
 
@@ -33,7 +36,7 @@ class ModelAll(nn.Module):
         :return:
         """
         x = self.encoder(tec24,aux)
-        x = self.transformer(x)
+        x = self.predictor(x)
         x = self.decoder(x)
 
         return x
