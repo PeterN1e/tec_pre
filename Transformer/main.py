@@ -1,19 +1,19 @@
 import torch
 import torch.nn as nn
-from config import train_path,test_path,device,batch_size,seq_length,epochs_num,transmit_parameter
+from Transformer.config import train_path,test_path,device,batch_size,seq_length,epochs_num,transmit_parameter
 import numpy as np
 from torch.utils.data import DataLoader
-from dataloader1 import TecDataset1,data_reader
-from tec_train import TrainModel
-from pic_show7 import pic_show,datagram
+from common.dataloader1 import TecDataset1,data_reader
+from common.tec_train import TrainModel
+from common.pic_show7 import pic_show,datagram
 import torch.optim as optim
 import warnings
 from sklearn.preprocessing import MinMaxScaler
-from model_all import ModelAll
+from Transformer.model_all import ModelAll
 import matplotlib.pyplot as plt
-from prediction6 import TecPredict
-from DataProcessing8 import data_save
-from Data_Preprocessing import scale_tec_aux_data,inverse_transform_predictions
+from common.prediction6 import TecPredict
+from common.DataProcessing8 import data_save
+from common.Data_Preprocessing import scale_tec_aux_data,inverse_transform_predictions
 
 def main():
     torch.manual_seed(42)  # 42是生命、宇宙和一切终极问题的答案

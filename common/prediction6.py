@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
-from config import device
+from Transformer.config import device
 class TecPredict(nn.Module):
     def __init__(self,model,test_loader):
         super().__init__()

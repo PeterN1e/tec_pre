@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from config import model_name,batch_size,device,seq_length,pred_length,dataset_year
+from Transformer.config import model_name,batch_size,device,seq_length,pred_length,dataset_year
 import os  #处理文件和目录
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import logging  #跟踪程序的运行状态、调试错误以及记录重要信息
@@ -14,7 +14,7 @@ logging.basicConfig(
     level=logging.INFO,#只有 INFO 级别及以上（INFO、WARNING、ERROR、CRITICAL）的日志会被处理；DEBUG 会被忽略。
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',#依次是时间、logger 名、级别、正文。
     handlers=[                                  # 同时把日志送到两个地方
-        logging.FileHandler("training.log"),  #所保存的日志
+        logging.FileHandler("../training.log"),  #所保存的日志
         logging.StreamHandler()               #控制台输出，可以实时查看进度
     ]
 )

@@ -1,6 +1,6 @@
 from CNNDecoder4 import CnnDecoder
 from CNNEncoder2 import CnnEncoder
-from transformerModule3 import TecPreTransformer
+from Transformer.transformerModule3 import TecPreTransformer
 import torch.nn as nn
 class ModelAll(nn.Module):
     def __init__(self,transmit_parameter,out_dim1,

@@ -1,10 +1,7 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-
-from config import model_name,seq_length,pred_length
+from Transformer.config import model_name,seq_length,pred_length
 import numpy as np
 from os import listdir
-from pic_show7 import datagram
+from common.pic_show7 import datagram
 
 def data_evaluation(data):
     data_results = []

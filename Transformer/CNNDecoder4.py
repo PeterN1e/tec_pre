@@ -1,7 +1,7 @@
 """
 分清nn.Conv2d中stride和Dilated的区别
 """
-from config import batch_size
+from Transformer.config import batch_size
 import torch
 import torch.nn as nn
 class CnnDecoder(nn.Module):
