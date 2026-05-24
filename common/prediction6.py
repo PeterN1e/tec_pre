@@ -1,12 +1,14 @@
 import torch
 from torch import nn
 import numpy as np
-from Transformer.config import device
+from config import TrainConfig
+cfg_train = TrainConfig()
 class TecPredict(nn.Module):
     def __init__(self,model,test_loader):
         super().__init__()
         self.model = model
         self.test_loader = test_loader
+        self.device = cfg_train.device
     def forward(self,frame_num=1):
         """
 
@@ -20,11 +22,11 @@ class TecPredict(nn.Module):
         delta = []
         with torch.no_grad():
             for batch_in_tec,batch_in_aux,batch_exp in self.test_loader:
-                batch_in_tec = batch_in_tec.float().to(device) #(batch_size,seq_length,71,73)
+                batch_in_tec = batch_in_tec.float().to(self.device) #(batch_size,seq_length,71,73)
                 # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
-                batch_in_aux = batch_in_aux.float().to(device)
-                batch_exp_tec = batch_exp[0].float().to(device)#(batch_size,71,73)
-                batch_exp_aux = batch_exp[1].float().to(device)  # (batch_size,71,73)
+                batch_in_aux = batch_in_aux.float().to(self.device)
+                batch_exp_tec = batch_exp[0].float().to(self.device)#(batch_size,71,73)
+                batch_exp_aux = batch_exp[1].float().to(self.device)  # (batch_size,71,73)
 
                 output = self.model(batch_in_tec,batch_in_aux)#(batch_size,71,73)
                 print(f"预测第{frame_num}组")

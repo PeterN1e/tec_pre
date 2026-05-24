@@ -4,14 +4,11 @@ import math
 
 
 class TecPreTransformer(nn.Module):
-    """
-
-    """
     def __init__(self,
-                 in_dim,
                  history_len,
                  predict_len,
-                 d_model,#模型维度
+                 in_dim=4104,
+                 d_model = 512,#模型维度
                  nhead=8,
                  num_encoder_layers=6,
                  dim_feedforward=2048,  #feedforward维度
@@ -40,33 +37,21 @@ class TecPreTransformer(nn.Module):
                 norm=nn.LayerNorm(d_model),
                 enable_nested_tensor=False
         )
-
         self.output_projection = nn.Linear(d_model, 4104)  #映射回所需长度
-        # self.output_projection = nn.Sequential(
-        #     nn.Linear(d_model, dim_feedforward),
-        #     nn.GELU(),
-        #     nn.Dropout(dropout),
-        #     nn.Linear(dim_feedforward, in_dim * predict_len)
-        # )
+
     def forward(self,src):
 
         batch_size = src.shape[0]
 
         src = self.input_projection(src)
-        #print("投影后前两步对比：", torch.allclose(src[0, 0, :], src[0, 1, :]))
-        # 2. 乘以sqrt(d_model)并加上位置编码
         src = src*math.sqrt(self.d_model)
-
         src = self.pos_encoder(src)
-
         src = self.transformer_encoder(src)
-
         last_step_hidden = src[:,-1,:]
         # 5. 输出映射: (batch, 1, d_model) -> (batch , 500)
         #last_step_hidden = last_step_hidden.reshape(batch_size,self.predict_len,-1)
         output = self.output_projection(last_step_hidden)
-        output = output.view(batch_size, 12,18,19)  # 动态适配predict_len
-        # output(24,1,4104)
+        output = output.view(batch_size, self.predict_len, 12,18,19)  # 动态适配predict_len
         return output
 
 
@@ -92,7 +77,8 @@ class PositionalEncoding(nn.Module):
 
 
 if __name__ == '__main__':
-     a = torch.randn(1,24,500)
-    # Transformer = TecPreTransformer(in_dim = 500,history_len = 24,predict_len = 1,d_model = 512)
-    # print(Transformer(a).shape)
+     a = torch.randn(24,12,4104)
+     model = TecPreTransformer(history_len=12,predict_len=1)
+     b = model(a)
+     print(b.size())
 

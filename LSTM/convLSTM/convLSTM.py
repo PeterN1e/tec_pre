@@ -1,6 +1,5 @@
 import torch.nn as nn
 import math
-from config import device
 import torch
 
 class ConvLSTMCell(nn.Module):
@@ -27,31 +26,29 @@ class ConvLSTMCell(nn.Module):
 
 
 class ConvLSTM(nn.Module):
-    def __init__(self,in_channels,hidden_channels,pred_len=1):
+    def __init__(self,history_len , in_channels=12,hidden_channels = 12,predict_len=1):
         super().__init__()
-        self.pred_len = pred_len
+        self.predict_len = predict_len
         self.conv_lstm_cell = ConvLSTMCell(input_dim=in_channels,hidden_dim=hidden_channels)
-
     def forward(self,x):
-        batch, seq_len, _, h, w = x.shape
+        batch, history_len, _, h, w = x.shape
         hidden = torch.zeros(batch, 12, h, w, device=x.device)
         cell = torch.zeros(batch, 12, h, w, device=x.device)
 
-        for i in range(seq_len):
+        for i in range(history_len):
             hidden,cell = self.conv_lstm_cell(x[:,i],hidden,cell)
 
         outputs = []
-        for _ in range(self.pred_len):
+        for _ in range(self.predict_len):
             hidden,cell = self.conv_lstm_cell(hidden,hidden,cell)
             outputs.append(hidden.unsqueeze(1))
 
         outputs = torch.cat(outputs, dim=1)
-        outputs = outputs[:,0,:,:,:]
-
         return outputs
 
 if __name__ == '__main__':
-    conv_lstm_test = ConvLSTM(12,12)
+
+    conv_lstm_test = ConvLSTM(12,12,predict_len=1)
     a = torch.randn(24,12,12,18,19)
     b= conv_lstm_test(a)
-    print(b.shape)
+    print(b.shape)#torch.Size([24, 1, 12, 18, 19])

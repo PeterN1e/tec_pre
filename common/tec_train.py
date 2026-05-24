@@ -1,13 +1,16 @@
 import torch
 import torch.nn as nn
-from Transformer.config import model_name,batch_size,device,seq_length,pred_length,dataset_year
+from config import TrainConfig,DatasetConfig,ModelConfig
+
+cfg_train = TrainConfig
+cfg_dataset = DatasetConfig
+cfg_model = ModelConfig
+
 import os  #处理文件和目录
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import logging  #跟踪程序的运行状态、调试错误以及记录重要信息
-
 # 导入进度条模块，tqdm可以让我们在训练过程中看到每个epoch的进度
 from tqdm import tqdm
-
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 logging.basicConfig(
@@ -22,22 +25,33 @@ logger = logging.getLogger(__name__)
 
 
 class TrainModel(nn.Module):
-    def __init__(self,model,train_loader,test_loader,criterion,optimizer):
+    def __init__(self,
+                 model,
+                 train_loader,
+                 test_loader,
+                 criterion,
+                 optimizer,
+                 ):
         super().__init__()
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.criterion = criterion
         self.optimizer = optimizer
+        self.batch_size = cfg_train.batch_size
+        self.model_name = cfg_model.model_name
+        self.seq_length = cfg_train.seq_length
+        self.pred_length = cfg_train.pred_length
+        self.dataset_year = cfg_dataset.dataset_year
+        self.device = cfg_train.device
 
-
-    def forward(self,num_epochs):
+    def forward(self,num_epochs,):
         train_losses = []
         test_losses=[]
-        logger.info(f'------batch_size {batch_size:3d}| '
-                    f'model: {model_name}| '
-                    f'seq_length:{seq_length:3d}to pred_length|{pred_length:3d}'
-                    f'所用数据集:{dataset_year:3d}'
+        logger.info(f'------batch_size {self.batch_size:3d}| '
+                    f'model: {self.model_name}| '
+                    f'seq_length:{self.seq_length:3d}  pred_length:{self.pred_length:3d}'
+                    f'所用数据集:{self.dataset_year:3d}'
                     )
 
         for epoch in range(1,num_epochs+1):
@@ -50,14 +64,12 @@ class TrainModel(nn.Module):
                         leave=False)
             for batch_in_tec,batch_in_aux,batch_exp in pbar:
 
-                batch_in_tec = batch_in_tec.float().to(device)#转换前的数据类型为float64，为了和之后权重（float32）偏置计算
-                batch_in_aux = batch_in_aux.float().to(device)
-                batch_exp = batch_exp[0].float().to(device)
+                batch_in_tec = batch_in_tec.float().to(self.device)#转换前的数据类型为float64，为了和之后权重（float32）偏置计算
+                batch_in_aux = batch_in_aux.float().to(self.device)
+                batch_exp = batch_exp[0].float().to(self.device)
                 #batch_exp(24,71,73)
                 output = self.model(batch_in_tec,batch_in_aux)
 
-                #loss = self.criterion(output.squeeze(1), batch_exp)
-                #batch_exp和output尽管维度不同，但是如果criterion不要求类别索引，也不看通道维度，而是逐元素做回归差值，就只需考虑元素个数一致就ok
                 loss = self.criterion(output, batch_exp)
                 self.optimizer.zero_grad()
                 loss.backward()

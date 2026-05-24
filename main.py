@@ -1,28 +1,36 @@
 import torch
 import torch.nn as nn
-from Transformer.config import train_path,test_path,device,batch_size,seq_length,epochs_num,transmit_parameter
+from config import ModelConfig,DatasetConfig,TrainConfig
 import numpy as np
 from torch.utils.data import DataLoader
-from common.dataloader1 import TecDataset1,data_reader
-from common.tec_train import TrainModel
-from common.pic_show7 import pic_show,datagram
+
 import torch.optim as optim
 import warnings
 from sklearn.preprocessing import MinMaxScaler
-from Transformer.model_all import ModelAll
-import matplotlib.pyplot as plt
+
+from common.dataloader1 import TecDataset1,data_reader
+from common.tec_train import TrainModel
+from common.pic_show7 import pic_show,datagram
+from common.model_all import ModelAll
 from common.prediction6 import TecPredict
 from common.DataProcessing8 import data_save
 from common.Data_Preprocessing import scale_tec_aux_data,inverse_transform_predictions
 
+import os
+import matplotlib.pyplot as plt
+
+cfg_model = ModelConfig()
+cfg_dataset = DatasetConfig()
+cfg_train = TrainConfig()
+
 def main():
-    torch.manual_seed(42)  # 42是生命、宇宙和一切终极问题的答案
+    torch.manual_seed(42)
     np.random.seed(42)
     warnings.filterwarnings('ignore')
-    print(f"使用设备：{device}")
-    train_data_tec, train_data_aux= data_reader(train_path)
+    print(f"使用设备：{cfg_train.device}")
+    train_data_tec, train_data_aux= data_reader(cfg_dataset.train_path)
     print("训练集装载完毕")
-    test_data_tec, test_data_aux= data_reader(test_path)
+    test_data_tec, test_data_aux= data_reader(cfg_dataset.test_path)
     print("测试集装载完毕")
     tec_scaler = MinMaxScaler()#不同数据缩放器不允许共同使用
     aux_scaler = MinMaxScaler()
@@ -38,56 +46,53 @@ def main():
     print("train_scaled_tec:", train_scaled_aux.shape)
     print("test_scaled_tec:", test_scaled_aux.shape)
 
-    train_dataset = TecDataset1(train_scaled_tec, train_scaled_aux, seq_length=seq_length)
-    test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length=seq_length)
+    train_dataset = TecDataset1(train_scaled_tec, train_scaled_aux, seq_length=cfg_train.seq_length)
+    test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length=cfg_train.seq_length)
 
-    train_dataloader = DataLoader(train_dataset,batch_size=batch_size, shuffle=True,drop_last = True)
-    test_dataloader = DataLoader(test_dataset,batch_size=batch_size, shuffle=False,drop_last = True)
+    train_dataloader = DataLoader(train_dataset,batch_size=cfg_train.batch_size, shuffle=True,drop_last = True)
+    test_dataloader = DataLoader(test_dataset,batch_size=cfg_train.batch_size, shuffle=False,drop_last = True)
     print("训练数据集总步长：", train_dataset.__len__())
     print("测试数据集总步长：", test_dataset.__len__())
-    print(f"批次大小：{batch_size}")
+    print(f"批次大小：{cfg_train.batch_size}")
 
-    model = ModelAll(transmit_parameter=3,
-                     history_len=seq_length,
-                     predict_len=1,
-                     d_model=512,
-                     in_dim2=512,
-                     out_dim1=512
-                     ).to(device)
-    model = model.to(device)
+    model = ModelAll(transmit_parameter = cfg_model.transmit_parameter,
+                     history_len = cfg_train.seq_length,
+                     predict_len = cfg_train.pred_length,
+                     aux_dim = 5,
+                     channel = 12
+                     ).to(cfg_train.device)
+    model = model.to(cfg_train.device)
 
     criterion_mse = nn.MSELoss()
     criterion_mae = nn.L1Loss()
     criterion_l1smooth = nn.SmoothL1Loss()
 
-    optimizer=optim.Adam(model.parameters(),lr=0.001)   #优化器对象
+    optimizer=optim.Adam(model.parameters(),lr = cfg_train.lr)   #优化器对象
+
     print("基础模型创建完成!")
     print(f"模型参数量:{sum(p.numel() for p in model.parameters() ):}")
-
     print("开始训练模型...")
 
-    tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_mse,optimizer=optimizer)
-    train_losses, test_losses = tec_train(epochs_num)
+    tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_mae,optimizer=optimizer)
+    train_losses, test_losses = tec_train(cfg_train.epochs_num)
 
-    torch.save(model.state_dict(), "transformer_model\\model_state_dict.pth")
-    print("the model training is completed and saved")
+    save_dir = cfg_model.model_name
+    if not os.path.exists(os.path.join("model_dict",save_dir)):
+        os.makedirs(os.path.join("model_dict",save_dir))
+    torch.save(model.state_dict(), os.path.join("model_dict",save_dir, "model_state_dict.pth"))
 
-    plt.rcParams['font.sans-serif']=['Microsoft YaHei', 'Arial Unicode MS']  #称之为rc配置或rc参数。通过rc参数可以修改默认的属性，
-# 包括窗体大小、每英寸的点数、线条宽度、颜色、样式、坐标轴、坐标和网络属性、文本、字体等。
-    plt.rcParams['axes.unicode_minus'] = False  #Matplotlib将使用ASCII字符U+002D来表示负号，从而避免负号显示为方块或乱码的问题。
+    print("模型训练结束")
 
+    plt.rcParams['font.sans-serif']=['Microsoft YaHei', 'Arial Unicode MS']
+    plt.rcParams['axes.unicode_minus'] = False
     plt.figure(figsize=(24, 8))
-    # fig = plt.figure(figsize=(a, b), dpi=dpi)
-    # 其中：figsize 设置图形的大小，a 为图形的宽， b 为图形的高，单位为英寸
-    # dpi 为设置图形每英寸的点数
-    plt.subplot(1, 2, 1)  # 是 Matplotlib 中用于创建子图的一个函数，
-    # 它允许在同一个图形窗口中绘制多个子图
+    plt.subplot(1, 2, 1)
     plt.plot(train_losses, label='training loss')
     plt.plot(test_losses, label='test loss')
     plt.title("model loss")
     plt.xlabel('Epoch')  # 分别为x ，y轴添加标签
     plt.ylabel('loss')
-    plt.legend()  # 用于为图表添加图例，适用于 区分不同数据系列，提高可读性。
+    plt.legend()
     plt.grid(True, alpha=0.3)
     plt.subplot(1, 2, 2)
     plt.plot(train_losses, label='training loss')
@@ -98,18 +103,15 @@ def main():
     plt.yscale('log')
     plt.legend()
     plt.grid(True, alpha=0.3)
-
     plt.tight_layout()
     plt.show()
 
 def model_predict_only():
-    train_data_tec, train_data_aux = data_reader(train_path)
-    test_data_tec, test_data_aux = data_reader(test_path)
+    train_data_tec, train_data_aux = data_reader(cfg_dataset.train_path)
+    test_data_tec, test_data_aux = data_reader(cfg_dataset.test_path)
 
     tec_scaler = MinMaxScaler()  # 不同数据缩放器不允许共同使用
     aux_scaler = MinMaxScaler()
-
-    ##########将tec数据进行降维 步骤：reshape → 缩放 → 恢复形状
 
     train_scaled_tec = scale_tec_aux_data(train_data_tec, tec_scaler, fit_scaler=True)  # 归一化后转变成原来的形状
     test_scaled_tec = scale_tec_aux_data(test_data_tec, tec_scaler, fit_scaler=False)
@@ -119,17 +121,17 @@ def model_predict_only():
     print("test_scaled_aux:", test_scaled_tec.shape)
     print("test_scaled_tec:", test_scaled_aux.shape)
 
-    test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length=seq_length)
+    test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length = cfg_train.seq_length)
 
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=True)
-    model = ModelAll(transmit_parameter=transmit_parameter,
-                     history_len=seq_length,
-                     predict_len=1,
-                     d_model=512,
-                     in_dim2=512,
-                     out_dim1=512
-                     ).to(device)
-    model.load_state_dict(torch.load("transformer_model\\model_state_dict.pth", map_location=device,weights_only=True))
+    test_dataloader = DataLoader(test_dataset, batch_size=cfg_train.batch_size, shuffle=False, drop_last=True)
+    model = ModelAll(transmit_parameter = cfg_model.transmit_parameter,
+                     history_len = cfg_train.seq_length,
+                     predict_len = cfg_train.pred_length,
+                     aux_dim = 5,
+                     channel = 12
+                     ).to(cfg_train.device)
+    save_dir = cfg_model.model_name
+    model.load_state_dict(torch.load(os.path.join("model_dict",save_dir, "model_state_dict.pth"), map_location=cfg_train.device,weights_only=True))
 
     tec_predict = TecPredict(model,test_dataloader)
     pre, act,aux,delta= tec_predict()
@@ -156,9 +158,6 @@ def model_predict_only():
             print("输入错误")
             break
 
-
-
-
 if __name__ == "__main__":
     a = input("训练模式输入0，推理模式输入1：")
     if a=="0":
@@ -176,6 +175,5 @@ if __name__ == "__main__":
         c = input("开始数据分析输入：0")
         if c=="0":
             exit()
-
     else:
         print("输入错误")

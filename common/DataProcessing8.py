@@ -1,6 +1,10 @@
-from Transformer.config import model_name,seq_length,pred_length
+from config import ModelConfig,DatasetConfig,TrainConfig
+cfg_model = ModelConfig()
+cfg_dataset = DatasetConfig()
+cfg_train = TrainConfig()
 import numpy as np
 from os import listdir
+import os
 from common.pic_show7 import datagram
 
 def data_evaluation(data):
@@ -23,14 +27,16 @@ def data_evaluation(data):
 
 
 def data_save(data):  #存入数据,格式为数组
-    np.savez(f"Summarization_data\\{seq_length}to{pred_length}\\{model_name}_data", a=data)
+    if not os.path.exists(f"Summarization_data\\{cfg_train.seq_length}to{cfg_train.pred_length}"):
+        os.makedirs(f"Summarization_data\\{cfg_train.seq_length}to{cfg_train.pred_length}")
+    np.savez(f"Summarization_data\\{cfg_train.seq_length}to{cfg_train.pred_length}\\{cfg_model.model_name}_data", a=data)
 
 def data_loaded():#导出数据
 
     data = []
-    data_list = listdir(f"Summarization_data\\{seq_length}to{pred_length}")
+    data_list = listdir(f"Summarization_data\\{cfg_train.seq_length}to{cfg_train.pred_length}")
     for i in range(len(data_list)):
-        data_cell = np.load(f"Summarization_data\\{seq_length}to{pred_length}\\{data_list[i]}", allow_pickle=True)
+        data_cell = np.load(f"Summarization_data\\{cfg_train.pred_length}to{cfg_train.pred_length}\\{data_list[i]}", allow_pickle=True)
         data_cell = data_cell['a']
         data.append(data_cell)
         data_list[i] = data_list[i].split('_')[0]
@@ -39,11 +45,6 @@ def data_loaded():#导出数据
 if __name__ == "__main__":
 
     a,b = data_loaded()
-    # print(type(a))
-    # print(a.shape)
-    # print(type(b))
-    # print(b)
-
     c= data_evaluation(a)
     print(c.shape)
 

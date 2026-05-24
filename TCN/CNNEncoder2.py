@@ -61,16 +61,3 @@ class CnnEncoder(nn.Module):
         return x
 
 
-
-#############测试
-# if __name__ == '__main__':
-#
-#     dummy = torch.randn(1,24,71,73)
-#     aux = torch.randn(1,24,4)
-#     enc = CnnEncoder(transmit_parameter = 48,out_dim =500 )
-#     vec = enc(dummy,aux)
-#     print(vec)
-#     print(vec.shape)
-
-
-

@@ -1,7 +1,7 @@
 import  torch
 import torch.nn as nn
-import math
 import torch.nn.functional as F
+from config import TrainConfig
 class Chomp1d(nn.Module):
     def __init__(self,chomp_size):
         super().__init__()
@@ -90,9 +90,10 @@ class TemporalConvNet(nn.Module):
 class TCNMiddlePredictor(nn.Module):
 
     def __init__(self,
-                 input_dim = 512,
+                 predict_len = 1,
+                 input_dim = 4104,
                  output_dim = 4104,
-                 seq_length = 12,
+                 history_len = 12,
                  num_channels=None,
                  kernel_size = 3,
                  dropout = 0.2,
@@ -102,9 +103,9 @@ class TCNMiddlePredictor(nn.Module):
             num_channels = [256, 256, 256]
         self.input_dim = input_dim
         self.out_dim = output_dim
-        self.seq_length = seq_length
+        self.seq_length = history_len
         self.use_attention = use_attention
-
+        self.predict_len = predict_len
         self.tcn = TemporalConvNet(
             num_inputs = input_dim,
             num_channels = num_channels,
@@ -150,33 +151,8 @@ class TCNMiddlePredictor(nn.Module):
         self.skip_connection = nn.Linear(tcn_output_dim, output_dim) \
             if tcn_output_dim != output_dim else None
 
-    def forward(self,x):
-        """
-               前向传播 - 核心计算流程
-
-               参数:
-                   x: 编码器输出，形状 (batch_size, seq_length, input_dim)
-                      例如: (8, 12, 512)
-                      - 8: batch_size，8个样本
-                      - 12: 12帧历史TEC图
-                      - 512: 每帧被编码为512维特征
-
-               返回:
-                   预测的特征向量，形状 (batch_size, 1, output_dim)
-                      例如: (8, 1, 4104)
-                      - 8: batch_size
-                      - 1: 单帧预测
-                      - 4104: 解码器输入维度
-
-               【详细步骤】
-               步骤1: 维度转换，适应Conv1d的输入格式
-               步骤2: TCN编码，提取时序特征
-               步骤3: 时序聚合，12帧->1帧
-               步骤4: 维度投影，256->4104
-               步骤5: 输出调整，添加单帧维度
-               """
+    def forward(self, x):
         batch_size = x.size(0)
-
         x = x.permute(0,2,1)
 
         tcn_out = self.tcn(x)
@@ -197,13 +173,13 @@ class TCNMiddlePredictor(nn.Module):
         if self.skip_connection is not None:
             residual = self.skip_connection(context)
             out = out + residual
-
-        out = out.unsqueeze(1)
-        output = out.view(batch_size, 12, 18, 19)
+        output = out.view(batch_size,self.predict_len, 12, 18, 19 )
 
         return output
 
 
 
 if __name__ == '__main__':
-    a=1
+    a = torch.randn(24, 12, 4104)
+    b = TCNMiddlePredictor(input_dim=4104, output_dim=4104, history_len=12)
+    print(b(a).shape)

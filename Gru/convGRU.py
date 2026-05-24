@@ -1,9 +1,9 @@
 import torch.nn as nn
-import math
-from config import device
+
+from config import ModelConfig
 import torch
 
-
+cfg_model = ModelConfig()
 class ConvGRUCell(nn.Module):
     """ConvGRU单元 - 处理2D空间序列"""
 
@@ -36,9 +36,7 @@ class ConvGRUCell(nn.Module):
 class ConvGRU(nn.Module):
     """
     简洁的ConvGRU预测模型
-
     输入: (B, T_in, C, H, W)  ->  (B, T_out, C, H, W)
-
     结构图解:
     ┌─────────────────────────────────────────────────────────┐
     │ 输入形状: (B, 10, 3, 18, 19)                              │
@@ -65,31 +63,26 @@ class ConvGRU(nn.Module):
     └─────────────────────────────────────────────────────────┘
     """
 
-    def __init__(self, in_channels=3, hidden_channels=64, seq_len=10, pred_len=5, gru_layers=2):
+    def __init__(self, in_channels=12, hidden_channels=64, history_len=12, predict_len=1, gru_layers=2):
         super().__init__()
-        self.seq_len = seq_len
-        self.pred_len = pred_len
-
+        self.history_len = history_len
+        self.predict_len = predict_len
         # 输入输出调整
         self.in_proj = nn.Conv2d(in_channels, hidden_channels, 1)
         self.out_proj = nn.Conv2d(hidden_channels, in_channels, 1)
-
         # GRU层
         self.encoder = nn.ModuleList([
             ConvGRUCell(hidden_channels, hidden_channels) for _ in range(gru_layers)
         ])
-
         self.decoder = nn.ModuleList([
             ConvGRUCell(hidden_channels, hidden_channels) for _ in range(gru_layers)
         ])
-
         # 预测头
         self.predict = nn.Sequential(
             nn.Conv2d(hidden_channels, hidden_channels, 3, padding=1),
             nn.ReLU(),
             nn.Conv2d(hidden_channels, hidden_channels, 3, padding=1)
         )
-
     def forward(self, x, teacher=None, force_ratio=0.5):
         """
         Args:
@@ -117,7 +110,7 @@ class ConvGRU(nn.Module):
         preds = []
         h_dec = h_states[-1]  # 初始状态 = 编码器最后时刻
 
-        for t in range(self.pred_len):
+        for t in range(self.predict_len):
             # 自回归输入
             if t == 0 or torch.rand(1) > force_ratio or teacher is None:
                 dec_input = h_dec[-1]  # 用上一步的预测
@@ -141,7 +134,7 @@ class ConvGRU(nn.Module):
         return torch.cat(preds, dim=1)
 
 if __name__ == '__main__':
-    conv_lstm_test = ConvGRU(12,12,pred_len = 1)
+    test = ConvGRU(12,12,history_len = 1)
     a = torch.randn(24,12,12,18,19)
-    b= conv_lstm_test(a)
+    b= test(a)
     print(b.shape)

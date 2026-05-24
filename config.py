@@ -1,12 +1,22 @@
 import torch
 from dataclasses import dataclass
+n = 4
+if n == 1:
+    model_name = "transformer"
+elif n == 2:
+    model_name = "tcn"
+elif n == 3:
+    model_name = "convlstm"
+elif n == 4:
+    model_name = "convgru"
 
 @dataclass
 class ModelConfig:
     transmit_parameter : int = 3  # 卷积编码层的通道数大小
     out_dim : int = 128  # 卷积编码层最终线性层的输出维度
-    model_name: str = "transformer"
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model_name: str = model_name
+
+
 @dataclass
 class DatasetConfig:
     dataset_year : int = 2011  # 使用数据集的年份
@@ -16,9 +26,9 @@ class DatasetConfig:
 
 @dataclass
 class TrainConfig:
-    epochs_num: int = 10
+    epochs_num: int = 15
     batch_size: int = 24
     seq_length: int = 24
     pred_length : int = 1 
     lr : float = 1e-3
-
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

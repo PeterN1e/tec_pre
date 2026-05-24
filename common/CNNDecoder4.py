@@ -1,9 +1,5 @@
-"""
-分清nn.Conv2d中stride和Dilated的区别
-"""
-from numpy.ma.core import concatenate
-import numpy as np
-from config import batch_size
+from config import TrainConfig
+cfg_train = TrainConfig()
 import torch
 import torch.nn as nn
 class CnnDecoder(nn.Module):
@@ -12,13 +8,10 @@ class CnnDecoder(nn.Module):
         self.tec_decoder = nn.Sequential(
 
             nn.ConvTranspose2d(in_channels=transmit_parameter_de*4, out_channels = transmit_parameter_de*2, padding=1, kernel_size=3, stride=2,output_padding=(1,0)),
-
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(in_channels=transmit_parameter_de*2, out_channels=transmit_parameter_de, kernel_size=3, stride=2, padding=1),
-
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channels=transmit_parameter_de, out_channels=1, kernel_size=1, stride=1, padding=0),
-
 
         )
         self.transmit_parameter_de = transmit_parameter_de
@@ -32,7 +25,7 @@ class CnnDecoder(nn.Module):
                 x_cell = x[:,i,:]
                 x_cell = self.tec_decoder(x_cell)#(B,pred,1,h,w)
                 if x_pred is not None:
-                    x_pred = x_pred.concat(x_cell)
+                    x_pred = torch.cat([x_pred, x_cell], dim=1)
                 else:
                     x_pred = x_cell
             x = x_pred.squeeze(1)
@@ -42,5 +35,6 @@ class CnnDecoder(nn.Module):
 
 if __name__ == '__main__':
     test_a = CnnDecoder(transmit_parameter_de=3)
-    test = torch.randn(batch_size, 12,12, 18, 19)
-    test_a(test)
+    test = torch.randn(cfg_train.batch_size, 12,12, 18, 19)
+    a = test_a(test)
+    print(a.size())

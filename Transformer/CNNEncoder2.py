@@ -1,7 +1,5 @@
-import numpy as np  #dd
-import pandas as pd
 import torch
-from torch.utils.data import Dataset, DataLoader
+
 import torch.nn as nn
 
 
@@ -29,8 +27,7 @@ class CnnEncoder(nn.Module):
             nn.ReLU(),
             nn.Conv2d(transmit_parameter * 2, transmit_parameter * 4, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),#(18,19)
-            #nn.AvgPool2d(2)#(9,9)
-            #nn.AdaptiveAvgPool2d()  #自适应池化操作
+
         )
         self.fc_tec = nn.Linear(4 * 18 * 19 * transmit_parameter,512)
         #self.fc_aux = nn.Linear(4,out_dim-1400)
@@ -44,7 +41,6 @@ class CnnEncoder(nn.Module):
         seq_length = tec.size(1)
         tec = tec.reshape(batch_size*seq_length,1,71,73)
         #（batch,seq_length,71,73）->（batch * seq_length,1,71,73）
-
         tec = self.Tec_encoder(tec)
 
         #（batch * seq_length,1,71,73）->（batch * seq_length,4 * transmit_parameter * 18 * 19）
@@ -54,9 +50,6 @@ class CnnEncoder(nn.Module):
         tec = tec.view(batch_size,seq_length,-1)
         x = torch.cat((aux,tec),dim = -1)
         x = self.fc_tec(x)
-        """
-        view()相当于reshape、resize，重新调整Tensor的形状
-        """
 
         return x
 

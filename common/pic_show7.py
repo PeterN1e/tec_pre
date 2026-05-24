@@ -16,9 +16,6 @@ def pic_show(act,pre,aux,delta):
     lon = np.arange(-180, 185, 5)
     picture_num = act.shape[0]
     fig = plt.figure(figsize=(250, 15))
-    # 使用 GridSpec 精确控制比例
-    # width_ratios=[1]*24 → 24列等宽
-    # height_ratios=[1, 1, 1] → 3行等高（但配合figsize实现1:2）
     gs = GridSpec(3,24,figure = fig,
                   width_ratios = [1]*24,
                   height_ratios=[1, 1, 1],
@@ -35,11 +32,9 @@ def pic_show(act,pre,aux,delta):
         plt.title(title_right,loc = 'right',fontsize=20)
         plt.title("真实图",loc = 'left', fontsize=20)
 
-
         ax2 = fig.add_subplot(gs[1, i])
         im2 = ax2.pcolormesh(lon, lat, pre[i, :, :], shading='auto', cmap='jet', vmin=0, vmax=vmax_tec)
-        #shrink = 0.8：colorbar高度压缩为子图高度的80 %
-        #pad = 0.02：colorbar与子图的间距
+
         plt.colorbar(im2,ax = ax2,label='TECU',shrink=1)
         plt.title("预测图", loc='left', fontsize=20)
 
