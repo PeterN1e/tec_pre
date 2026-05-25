@@ -1,5 +1,21 @@
 import torch
 from dataclasses import dataclass
+from pathlib import Path
+import platform
+###########################################
+# 获取当前 .py 文件所在的目录（）
+BASE_DIR = Path(__file__).resolve().parent
+# 在当前 .py 文件的同级目录下创建 log 文件夹
+log_dir = BASE_DIR / "log"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_path = log_dir / "training.log"
+###############################################
+
+if platform.system() == "Windows":
+    base_path = Path("D:/Dataset______________/tec")
+else:
+    base_path = Path("/mnt/d/Dataset______________/tec")  # 或你的 Linux 挂载路径
+
 n = 4
 if n == 1:
     model_name = "transformer"
@@ -20,9 +36,9 @@ class ModelConfig:
 @dataclass
 class DatasetConfig:
     dataset_year : int = 2011  # 使用数据集的年份
-    train_path : str = f"D:\\Dataset______________\\tec\\{dataset_year}\\TrainDataset"  # tec图cdf文件夹路径
-    test_path : str = f"D:\\Dataset______________\\tec\\{dataset_year}\\TestDataset"
-    val_path : str = "D:\\Dataset______________\\tec\\2012\\ValDataset"
+    train_path = base_path/f"{dataset_year}/TrainDataset"  # tec图cdf文件夹路径
+    test_path = base_path/f"{dataset_year}/TestDataset"
+    val_path = base_path/f"2012/ValDataset"
 
 @dataclass
 class TrainConfig:
@@ -31,4 +47,5 @@ class TrainConfig:
     seq_length: int = 24
     pred_length : int = 1 
     lr : float = 1e-3
+    log_path : str = log_path
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

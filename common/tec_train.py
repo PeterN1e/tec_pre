@@ -17,7 +17,7 @@ logging.basicConfig(
     level=logging.INFO,#只有 INFO 级别及以上（INFO、WARNING、ERROR、CRITICAL）的日志会被处理；DEBUG 会被忽略。
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',#依次是时间、logger 名、级别、正文。
     handlers=[                                  # 同时把日志送到两个地方
-        logging.FileHandler("../training.log"),  #所保存的日志
+        logging.FileHandler(cfg_train.log_path),  #所保存的日志
         logging.StreamHandler()               #控制台输出，可以实时查看进度
     ]
 )
