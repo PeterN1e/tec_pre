@@ -104,6 +104,9 @@ def main():
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    os.makedirs(cfg_train.pic_path, exist_ok=True)
+    file_path = os.path.join(cfg_train.pic_path, 'train_loss.png')
+    plt.savefig(file_path)
     plt.show()
 
 def model_predict_only():

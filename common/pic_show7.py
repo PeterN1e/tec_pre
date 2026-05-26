@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from matplotlib.gridspec import GridSpec
-
+from config import TrainConfig,ModelConfig
+cfg_model = ModelConfig()
+cfg_train = TrainConfig()
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
 plt.rcParams['axes.unicode_minus'] = False
 def pic_show(act,pre,aux,delta):
@@ -45,7 +48,9 @@ def pic_show(act,pre,aux,delta):
 
         plt.title("差值图", loc='left', fontsize=20)
         plt.title(f"{average}", loc='center',fontsize=20)
-
+        os.makedirs(cfg_train.pic_path, exist_ok=True)
+        file_path = os.path.join(cfg_train.pic_path, 'r-p-d.png')
+        plt.savefig(file_path)
     plt.show()
 def datagram(data,label=None):
     colors = ['r','g','b','c','y']
@@ -74,4 +79,5 @@ def datagram(data,label=None):
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    plt.savefig('model-compare.png')
     plt.show()
