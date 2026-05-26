@@ -31,14 +31,11 @@ class TecPredict(nn.Module):
                 output = self.model(batch_in_tec,batch_in_aux)#(batch_size,71,73)
                 print(f"预测第{frame_num}组")
                 frame_num += 1
-
-                delta_one = batch_exp_tec-output #计算每个批次真实值与实际值之差
-                delta.append(delta_one.cpu().numpy())#delta 列表中的张量仍在 GPU（cuda:0）上
                                                     #prediction6.py 使用 np.array(delta) 时未先转移到 CPU
                 #但 NumPy 不支持 GPU 数据，要将数据放到cpu上并转化为np数据
                 predictions.append(output.cpu().numpy())
                 actuals.append(batch_exp_tec.cpu().numpy())
                 datetime.append(batch_exp_aux.cpu().numpy())
 
-        return np.array(predictions),np.array(actuals),np.array(datetime),np.array(delta)
+        return np.array(predictions),np.array(actuals),np.array(datetime)
 

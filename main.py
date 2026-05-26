@@ -110,16 +110,13 @@ def main():
     plt.show()
 
 def model_predict_only():
-    train_data_tec, train_data_aux = data_reader(cfg_dataset.train_path)
     test_data_tec, test_data_aux = data_reader(cfg_dataset.test_path)
 
     tec_scaler = MinMaxScaler()  # 不同数据缩放器不允许共同使用
     aux_scaler = MinMaxScaler()
 
-    train_scaled_tec = scale_tec_aux_data(train_data_tec, tec_scaler, fit_scaler=True)  # 归一化后转变成原来的形状
     test_scaled_tec = scale_tec_aux_data(test_data_tec, tec_scaler, fit_scaler=False)
 
-    train_scaled_aux = scale_tec_aux_data(train_data_aux, aux_scaler, fit_scaler=True)
     test_scaled_aux = scale_tec_aux_data(test_data_aux, aux_scaler, fit_scaler=False)
     print("test_scaled_aux:", test_scaled_tec.shape)
     print("test_scaled_tec:", test_scaled_aux.shape)
@@ -137,14 +134,11 @@ def model_predict_only():
     model.load_state_dict(torch.load(os.path.join("model_dict",save_dir, "model_state_dict.pth"), map_location=cfg_train.device,weights_only=True))
 
     tec_predict = TecPredict(model,test_dataloader)
-    pre, act,aux,delta= tec_predict()
+    pre, act,aux= tec_predict()
     pre = inverse_transform_predictions(pre,tec_scaler)
     act = inverse_transform_predictions(act,tec_scaler)
     aux = inverse_transform_predictions(aux,aux_scaler)
-    delta = inverse_transform_predictions(delta,tec_scaler)
-
-    data_save(delta)
-
+    delta = act - pre
     delta_abs = np.abs(delta)   #计算绝对值
     delta_average_one_hour = np.mean(delta_abs,axis =(2, 3) )#对单张差值取平均值
     delta_average_one_day = np.mean(delta_average_one_hour,axis = 1)
