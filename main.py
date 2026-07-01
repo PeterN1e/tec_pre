@@ -3,17 +3,15 @@ import torch.nn as nn
 from config import ModelConfig,DatasetConfig,TrainConfig
 import numpy as np
 from torch.utils.data import DataLoader
-
+import joblib
 import torch.optim as optim
 import warnings
 from sklearn.preprocessing import MinMaxScaler
-
-from common.dataloader1 import TecDataset1,data_reader
+from common.dataloader1 import TecDataset1,data_reader,TecIonosphereDataset
 from common.tec_train import TrainModel
 from common.pic_show7 import pic_show,datagram
 from common.model_all import ModelAll
 from common.prediction6 import TecPredict
-from common.DataProcessing8 import data_save
 from common.Data_Preprocessing import scale_tec_aux_data,inverse_transform_predictions
 
 import os
@@ -27,32 +25,38 @@ def main():
     torch.manual_seed(42)
     np.random.seed(42)
     warnings.filterwarnings('ignore')
-    print(f"使用设备：{cfg_train.device}")
-    train_data_tec, train_data_aux= data_reader(cfg_dataset.train_path)
-    print("训练集装载完毕")
-    test_data_tec, test_data_aux= data_reader(cfg_dataset.test_path)
-    print("测试集装载完毕")
-    tec_scaler = MinMaxScaler()#不同数据缩放器不允许共同使用
+
+    tec_scaler = MinMaxScaler()  # 不同数据缩放器不允许共同使用
     aux_scaler = MinMaxScaler()
 
-    train_scaled_tec = scale_tec_aux_data(train_data_tec,tec_scaler,fit_scaler=True) #归一化后转变成原来的形状
-    test_scaled_tec = scale_tec_aux_data(test_data_tec,tec_scaler,fit_scaler=False)
+    train_dataset = TecIonosphereDataset(
+    tec_dir=cfg_dataset.tec_dir,
+    indices_dir=cfg_dataset.indices_dir,
+    start_year=2002, end_year=2010,
+    start_month=200201, end_month=200812,
+    k=3,
+    is_train = True,
+    tec_scaler = tec_scaler,
+    aux_scaler = aux_scaler
 
-    train_scaled_aux = scale_tec_aux_data(train_data_aux,aux_scaler,fit_scaler=True)
-    test_scaled_aux = scale_tec_aux_data(test_data_aux,aux_scaler,fit_scaler=False)
+    )
 
-    print("test_scaled_tec:", train_scaled_tec.shape)
-    print("test_scaled_aux:", test_scaled_tec.shape)
-    print("train_scaled_tec:", train_scaled_aux.shape)
-    print("test_scaled_tec:", test_scaled_aux.shape)
-
-    train_dataset = TecDataset1(train_scaled_tec, train_scaled_aux, seq_length=cfg_train.seq_length)
-    test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length=cfg_train.seq_length)
+    val_dataset =  TecIonosphereDataset(
+    tec_dir=cfg_dataset.tec_dir,
+    indices_dir=cfg_dataset.indices_dir,
+    start_year=2002, end_year=2010,
+    start_month=200901, end_month=201012,
+    k=3,
+    is_train=False,
+    tec_scaler = tec_scaler,
+    aux_scaler = aux_scaler
+    )
 
     train_dataloader = DataLoader(train_dataset,batch_size=cfg_train.batch_size, shuffle=True,drop_last = True)
-    test_dataloader = DataLoader(test_dataset,batch_size=cfg_train.batch_size, shuffle=False,drop_last = True)
+    val_dataloader = DataLoader(val_dataset,batch_size=cfg_train.batch_size, shuffle=False,drop_last = True)
+
     print("训练数据集总步长：", train_dataset.__len__())
-    print("测试数据集总步长：", test_dataset.__len__())
+    print("测试数据集总步长：", val_dataset.__len__())
     print(f"批次大小：{cfg_train.batch_size}")
 
     model = ModelAll(transmit_parameter = cfg_model.transmit_parameter,
@@ -69,17 +73,32 @@ def main():
 
     optimizer=optim.Adam(model.parameters(),lr = cfg_train.lr)   #优化器对象
 
-    print("基础模型创建完成!")
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode='min',
+        factor=0.5,
+        patience=3,
+        verbose=True
+    )
+    print("模型创建完成!")
     print(f"模型参数量:{sum(p.numel() for p in model.parameters() ):}")
     print("开始训练模型...")
 
-    tec_train = TrainModel(model = model,train_loader=train_dataloader,test_loader=test_dataloader,criterion=criterion_mae,optimizer=optimizer)
-    train_losses, test_losses = tec_train(cfg_train.epochs_num)
+    tec_train = TrainModel(model = model,
+                           train_loader = train_dataloader,
+                           test_loader = val_dataloader,
+                           criterion = criterion_mae,
+                           optimizer =optimizer,
+                           scheduler =scheduler,
+                           save_best = True)
+    train_losses, test_losses = tec_train.train(cfg_train.epochs_num,)
 
-    save_dir = cfg_model.model_name
-    if not os.path.exists(os.path.join("model_dict",save_dir)):
-        os.makedirs(os.path.join("model_dict",save_dir))
-    torch.save(model.state_dict(), os.path.join("model_dict",save_dir, "model_state_dict.pth"))
+#############保存模型参数和
+    if not os.path.exists(os.path.join(cfg_train.model_path,cfg_model.model_name)):
+        os.makedirs(os.path.join(cfg_train.model_path,cfg_model.model_name))
+    torch.save(model.state_dict(), os.path.join(cfg_train.model_path,cfg_model.model_name, "model_state_dict.pth"))
+    joblib.dump(tec_scaler, os.path.join(cfg_train.model_path,"tec_scaler.pkl"))
+    joblib.dump(aux_scaler, os.path.join(cfg_train.model_path,"aux_scaler.pkl"))
 
     print("模型训练结束")
 
@@ -105,24 +124,25 @@ def main():
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     os.makedirs(cfg_train.pic_path, exist_ok=True)
-    file_path = os.path.join(cfg_train.pic_path, 'train_loss.png')
+    file_path = os.path.join(cfg_train.pic_path, f'{cfg_model.model_name}train_loss.png')
     plt.savefig(file_path)
     plt.show()
 
 def model_predict_only():
-    test_data_tec, test_data_aux = data_reader(cfg_dataset.test_path)
 
-    tec_scaler = MinMaxScaler()  # 不同数据缩放器不允许共同使用
-    aux_scaler = MinMaxScaler()
+    tec_scaler = joblib.load(os.path.join(cfg_train.model_path , "tec_scaler.pkl"))
+    aux_scaler = joblib.load(os.path.join(cfg_train.model_path, "aux_scaler.pkl"))
 
-    test_scaled_tec = scale_tec_aux_data(test_data_tec, tec_scaler, fit_scaler=False)
-
-    test_scaled_aux = scale_tec_aux_data(test_data_aux, aux_scaler, fit_scaler=False)
-    print("test_scaled_aux:", test_scaled_tec.shape)
-    print("test_scaled_tec:", test_scaled_aux.shape)
-
-    test_dataset = TecDataset1(test_scaled_tec, test_scaled_aux, seq_length = cfg_train.seq_length)
-
+    test_dataset = TecIonosphereDataset(
+        tec_dir=cfg_dataset.tec_dir,
+        indices_dir=cfg_dataset.indices_dir,
+        start_year=2002, end_year=2010,
+        start_month=200201, end_month=200812,
+        k=3,
+        is_train=False,
+        tec_scaler = tec_scaler,
+        aux_scaler = aux_scaler
+    )
     test_dataloader = DataLoader(test_dataset, batch_size=cfg_train.batch_size, shuffle=False, drop_last=True)
     model = ModelAll(transmit_parameter = cfg_model.transmit_parameter,
                      history_len = cfg_train.seq_length,
@@ -134,6 +154,7 @@ def model_predict_only():
     model.load_state_dict(torch.load(os.path.join("model_dict",save_dir, "model_state_dict.pth"), map_location=cfg_train.device,weights_only=True))
 
     tec_predict = TecPredict(model,test_dataloader)
+
     pre, act,aux= tec_predict()
     pre = inverse_transform_predictions(pre,tec_scaler)
     act = inverse_transform_predictions(act,tec_scaler)

@@ -26,7 +26,7 @@ class ConvLSTMCell(nn.Module):
 
 
 class ConvLSTM(nn.Module):
-    def __init__(self,history_len , in_channels=12,hidden_channels = 12,predict_len=1):
+    def __init__(self,history_len , in_channels=12,hidden_channels = 12,predict_len=12):
         super().__init__()
         self.predict_len = predict_len
         self.conv_lstm_cell = ConvLSTMCell(input_dim=in_channels,hidden_dim=hidden_channels)
@@ -48,7 +48,7 @@ class ConvLSTM(nn.Module):
 
 if __name__ == '__main__':
 
-    conv_lstm_test = ConvLSTM(12,12,predict_len=1)
-    a = torch.randn(24,12,12,18,19)
+    conv_lstm_test = ConvLSTM(12,12,predict_len=12)
+    a = torch.randn(24,36,12,18,19)
     b= conv_lstm_test(a)
     print(b.shape)#torch.Size([24, 1, 12, 18, 19])

@@ -23,16 +23,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-class TrainModel(nn.Module):
+class TrainModel:
     def __init__(self,
                  model,
                  train_loader,
                  test_loader,
                  criterion,
                  optimizer,
+                 scheduler,
+                 save_best
                  ):
         super().__init__()
+        """
+        Args:
+        model: PyTorch 模型
+        optimizer: 优化器
+        criterion: 损失函数
+        train_loader: 训练 DataLoader
+        test_loader: 测试 DataLoader
+        device: 计算设备
+        scheduler: 学习率调度器（可选），由外部创建并传入
+        patience: 早停的耐心值（连续多少个 epoch 验证损失不下降则停止）
+        save_best: 是否保存验证损失最低的模型
+        model_save_path: 最佳模型保存路径
+        """
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -44,8 +58,14 @@ class TrainModel(nn.Module):
         self.pred_length = cfg_train.pred_length
         self.dataset_year = cfg_dataset.dataset_year
         self.device = cfg_train.device
+        self.scheduler = scheduler,
+        self.save_best = save_best
+        self.patience = 5
+        self.best_test_loss = float('inf')
+        self.counter = 0
+        self.early_stop = False
 
-    def forward(self,num_epochs,):
+    def train(self,num_epochs):
         train_losses = []
         test_losses=[]
         logger.info(f'------batch_size {self.batch_size:3d}| '
@@ -55,22 +75,23 @@ class TrainModel(nn.Module):
                     )
 
         for epoch in range(1,num_epochs+1):
-            self.model.train()
+            self.model.train()#模型测试模式
             train_loss ,num= 0.0,0
             pbar = tqdm(self.train_loader,
                         total=len(self.train_loader),
                         ncols=100,
                         desc=f'Epoch {epoch}/{num_epochs}',
                         leave=False)
-            for batch_in_tec,batch_in_aux,batch_exp in pbar:
+            for batch_in_tec,batch_in_aux,batch_exp_tec,batch_exp_aux in pbar:
 
                 batch_in_tec = batch_in_tec.float().to(self.device)#转换前的数据类型为float64，为了和之后权重（float32）偏置计算
                 batch_in_aux = batch_in_aux.float().to(self.device)
-                batch_exp = batch_exp[0].float().to(self.device)
+                batch_exp_tec = batch_exp_tec.float().to(self.device)
+                batch_exp_aux = batch_exp_aux.float().to(self.device)
                 #batch_exp(24,71,73)
                 output = self.model(batch_in_tec,batch_in_aux)
 
-                loss = self.criterion(output, batch_exp)
+                loss = self.criterion(output, batch_exp_tec)
                 self.optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
@@ -86,14 +107,12 @@ class TrainModel(nn.Module):
             test_loss = 0.0
             with torch.no_grad():
                 for batch_in_tec,batch_in_aux,batch_exp in self.test_loader:
-                    batch_in_tec = batch_in_tec.float().cuda()  # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
-                    batch_in_aux = batch_in_aux.float().cuda()
-                    batch_exp = batch_exp[0].float().cuda()
 
+                    batch_in_tec = batch_in_tec.float().to(self.device)  # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
+                    batch_in_aux = batch_in_aux.float().to(self.device)
+                    batch_exp_tec = batch_exp_tec.float().to(self.device)
                     outputs = self.model(batch_in_tec,batch_in_aux)
-
-                    test_loss += self.criterion(outputs, batch_exp).item()
-
+                    test_loss += self.criterion(outputs, batch_exp_tec).item()
             avg_train_loss = train_loss / len(self.train_loader)
             avg_test_loss = test_loss / len(self.test_loader)
 
@@ -103,4 +122,17 @@ class TrainModel(nn.Module):
                         f'Train {avg_train_loss:.5f} | '
                         f'Test  {avg_test_loss:.5f}')
             pbar.close()
+
+            if self.scheduler is not None:
+                if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    self.scheduler.step(avg_test_loss)
+                else:
+                    self.scheduler.step()  # 其他调度器（StepLR, CosineAnnealingLR 等）
+
+            if avg_test_loss < self.best_test_loss:
+                self.best_test_loss = avg_test_loss
+                self.counter = 0
+                if self.save_best:
+                    torch.save(self.model.state_dict(), self.model_save_path)
+                    logger.info(f'Best model saved at epoch {epoch} with test loss {avg_test_loss:.5f}')
         return train_losses, test_losses
