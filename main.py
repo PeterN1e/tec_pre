@@ -32,21 +32,18 @@ def main():
     train_dataset = TecIonosphereDataset(
     tec_dir=cfg_dataset.tec_dir,
     indices_dir=cfg_dataset.indices_dir,
-    start_year=2002, end_year=2010,
-    start_month=200201, end_month=200812,
-    k=3,
+    start_month=cfg_dataset.start_month_train, end_month=cfg_dataset.end_month_train,
+    his_day_num=cfg_train.his_day_num,
     is_train = True,
     tec_scaler = tec_scaler,
     aux_scaler = aux_scaler
-
     )
 
     val_dataset =  TecIonosphereDataset(
     tec_dir=cfg_dataset.tec_dir,
     indices_dir=cfg_dataset.indices_dir,
-    start_year=2002, end_year=2010,
-    start_month=200901, end_month=201012,
-    k=3,
+    start_month=cfg_dataset.start_month_val, end_month=cfg_dataset.end_month_val,
+    his_day_num=cfg_train.his_day_num,
     is_train=False,
     tec_scaler = tec_scaler,
     aux_scaler = aux_scaler
@@ -62,7 +59,7 @@ def main():
     model = ModelAll(transmit_parameter = cfg_model.transmit_parameter,
                      history_len = cfg_train.seq_length,
                      predict_len = cfg_train.pred_length,
-                     aux_dim = 5,
+                     aux_dim = cfg_dataset.aux_dim,
                      channel = 12
                      ).to(cfg_train.device)
     model = model.to(cfg_train.device)
@@ -84,19 +81,20 @@ def main():
     print(f"模型参数量:{sum(p.numel() for p in model.parameters() ):}")
     print("开始训练模型...")
 
+    if not os.path.exists(os.path.join(cfg_train.model_path,cfg_model.model_name)): #模型存放位置
+        os.makedirs(os.path.join(cfg_train.model_path,cfg_model.model_name))
+
     tec_train = TrainModel(model = model,
                            train_loader = train_dataloader,
                            test_loader = val_dataloader,
                            criterion = criterion_mae,
                            optimizer =optimizer,
                            scheduler =scheduler,
-                           save_best = True)
-    train_losses, test_losses = tec_train.train(cfg_train.epochs_num,)
+                           save_best = True,
+                           model_save_path = os.path.join(cfg_train.model_path,cfg_model.model_name, "model_state_dict.pth"))
+    train_losses, test_losses = tec_train.train(cfg_train.epochs_num)
 
-#############保存模型参数和
-    if not os.path.exists(os.path.join(cfg_train.model_path,cfg_model.model_name)):
-        os.makedirs(os.path.join(cfg_train.model_path,cfg_model.model_name))
-    torch.save(model.state_dict(), os.path.join(cfg_train.model_path,cfg_model.model_name, "model_state_dict.pth"))
+#############保存和标准化映射关系
     joblib.dump(tec_scaler, os.path.join(cfg_train.model_path,"tec_scaler.pkl"))
     joblib.dump(aux_scaler, os.path.join(cfg_train.model_path,"aux_scaler.pkl"))
 
@@ -136,9 +134,8 @@ def model_predict_only():
     test_dataset = TecIonosphereDataset(
         tec_dir=cfg_dataset.tec_dir,
         indices_dir=cfg_dataset.indices_dir,
-        start_year=2002, end_year=2010,
-        start_month=200201, end_month=200812,
-        k=3,
+        start_month=cfg_dataset.start_month_test, end_month=cfg_dataset.end_month_test,
+        his_day_num=cfg_train.his_day_num,
         is_train=False,
         tec_scaler = tec_scaler,
         aux_scaler = aux_scaler
@@ -147,7 +144,7 @@ def model_predict_only():
     model = ModelAll(transmit_parameter = cfg_model.transmit_parameter,
                      history_len = cfg_train.seq_length,
                      predict_len = cfg_train.pred_length,
-                     aux_dim = 5,
+                     aux_dim = cfg_dataset.aux_dim,
                      channel = 12
                      ).to(cfg_train.device)
     save_dir = cfg_model.model_name

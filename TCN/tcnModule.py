@@ -181,5 +181,5 @@ class TCNMiddlePredictor(nn.Module):
 
 if __name__ == '__main__':
     a = torch.randn(24, 12, 4104)
-    b = TCNMiddlePredictor(input_dim=4104, output_dim=4104, history_len=12)
+    b = TCNMiddlePredictor(input_dim=4104, output_dim=4104,predict_len =12, history_len=36)
     print(b(a).shape)

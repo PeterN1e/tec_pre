@@ -27,8 +27,8 @@ class FilmFusion(nn.Module):
             raise ValueError("Invalid out_dim")
 
 if __name__ == '__main__':
-     aux = torch.randn(24,12,5)
-     tec = torch.randn(24,12,12,18,19)
-     test = FilmFusion(5,12)
+     aux = torch.randn(24,36,6)
+     tec = torch.randn(24,36,12,18,19)
+     test = FilmFusion(6,12)
      b = test(tec,aux)
      print(b.size())

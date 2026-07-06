@@ -18,24 +18,23 @@ class TecPredict(nn.Module):
         self.model.eval()
         predictions = []
         actuals = []
-        datetime = []
-        delta = []
+        physical_value = []
         with torch.no_grad():
-            for batch_in_tec,batch_in_aux,batch_exp in self.test_loader:
+            for batch_in_tec,batch_in_aux,batch_exp_tec,batch_exp_aux in self.test_loader:
                 batch_in_tec = batch_in_tec.float().to(self.device) #(batch_size,seq_length,71,73)
                 # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
                 batch_in_aux = batch_in_aux.float().to(self.device)
-                batch_exp_tec = batch_exp[0].float().to(self.device)#(batch_size,71,73)
-                batch_exp_aux = batch_exp[1].float().to(self.device)  # (batch_size,71,73)
+                batch_exp_tec = batch_exp_tec.float().to(self.device)
+                batch_exp_aux = batch_exp_tec.float().to(self.device)
 
-                output = self.model(batch_in_tec,batch_in_aux)#(batch_size,71,73)
+                output = self.model(batch_in_tec,batch_in_aux)
                 print(f"预测第{frame_num}组")
                 frame_num += 1
-                                                    #prediction6.py 使用 np.array(delta) 时未先转移到 CPU
-                #但 NumPy 不支持 GPU 数据，要将数据放到cpu上并转化为np数据
+                #prediction6.py 使用 np.array(delta) 时未先转移到 CPU
+                # NumPy 不支持 GPU 数据，要将数据放到cpu上并转化为np数据
                 predictions.append(output.cpu().numpy())
                 actuals.append(batch_exp_tec.cpu().numpy())
-                datetime.append(batch_exp_aux.cpu().numpy())
+                physical_value.append(batch_exp_aux.cpu().numpy())
 
-        return np.array(predictions),np.array(actuals),np.array(datetime)
+        return np.array(predictions),np.array(actuals),np.array(physical_value)
 

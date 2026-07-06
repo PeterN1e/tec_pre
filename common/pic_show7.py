@@ -52,10 +52,10 @@ def pic_show(act,pre,aux,delta):
         file_path = os.path.join(cfg_train.pic_path, 'r-p-d.png')
         plt.savefig(file_path)
     plt.show()
+
 def datagram(data,label=None):
     colors = ['r','g','b','c','y']
     x = np.arange(0, data.shape[-1], 1)#定义x轴长度
-
 
     plt.figure(figsize=(15, 4))
     if data.ndim==2:

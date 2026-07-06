@@ -30,8 +30,10 @@ class TrainModel:
                  test_loader,
                  criterion,
                  optimizer,
-                 scheduler,
-                 save_best
+                 model_save_path,
+                 scheduler = None,
+                 save_best = True,
+                 patience = 5,
                  ):
         super().__init__()
         """
@@ -56,11 +58,13 @@ class TrainModel:
         self.model_name = cfg_model.model_name
         self.seq_length = cfg_train.seq_length
         self.pred_length = cfg_train.pred_length
-        self.dataset_year = cfg_dataset.dataset_year
+        self.start_month_train = cfg_dataset.start_month_train
+        self.end_month_train = cfg_dataset.end_month_train
         self.device = cfg_train.device
-        self.scheduler = scheduler,
+        self.scheduler = scheduler
         self.save_best = save_best
-        self.patience = 5
+        self.patience = patience
+        self.model_save_path = model_save_path
         self.best_test_loss = float('inf')
         self.counter = 0
         self.early_stop = False
@@ -71,7 +75,7 @@ class TrainModel:
         logger.info(f'------batch_size {self.batch_size:3d}| '
                     f'model: {self.model_name}| '
                     f'seq_length:{self.seq_length:3d}  pred_length:{self.pred_length:3d}'
-                    f'所用数据集:{self.dataset_year:3d}'
+                    f'所用数据集:{self.start_month_train:3d}-{self.end_month_train:3d}'
                     )
 
         for epoch in range(1,num_epochs+1):
@@ -88,7 +92,7 @@ class TrainModel:
                 batch_in_aux = batch_in_aux.float().to(self.device)
                 batch_exp_tec = batch_exp_tec.float().to(self.device)
                 batch_exp_aux = batch_exp_aux.float().to(self.device)
-                #batch_exp(24,71,73)
+
                 output = self.model(batch_in_tec,batch_in_aux)
 
                 loss = self.criterion(output, batch_exp_tec)
@@ -106,7 +110,7 @@ class TrainModel:
             self.model.eval()  # 模型切换为评估模式
             test_loss = 0.0
             with torch.no_grad():
-                for batch_in_tec,batch_in_aux,batch_exp in self.test_loader:
+                for batch_in_tec,batch_in_aux,batch_exp_tec,batch_exp_aux in self.test_loader:
 
                     batch_in_tec = batch_in_tec.float().to(self.device)  # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
                     batch_in_aux = batch_in_aux.float().to(self.device)
@@ -135,4 +139,10 @@ class TrainModel:
                 if self.save_best:
                     torch.save(self.model.state_dict(), self.model_save_path)
                     logger.info(f'Best model saved at epoch {epoch} with test loss {avg_test_loss:.5f}')
+            else:
+                self.counter += 1
+                if self.counter >= self.patience:
+                    logger.info(f'Early stopping triggered at epoch {epoch}')
+                    self.early_stop = True
+                    break  # 终止训练
         return train_losses, test_losses

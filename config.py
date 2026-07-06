@@ -43,7 +43,13 @@ class ModelConfig:
 
 @dataclass
 class DatasetConfig:
-    dataset_year : int = 2011  # 使用数据集的年份
+    start_month_train = 200201
+    end_month_train = 200812
+    start_month_val = 200901
+    end_month_val = 200912
+    start_month_test = 201001
+    end_month_test = 201012
+    aux_dim = 6
     tec_dir = dataset_base_path/"tec_ionex_npy/igsg"  # tec图cdf文件夹路径
     indices_dir = dataset_base_path/"indices"
 
@@ -51,8 +57,10 @@ class DatasetConfig:
 class TrainConfig:
     epochs_num: int = 10
     batch_size: int = 24
-    seq_length: int = 24
-    pred_length : int = 1 
+    his_day_num: int = 3
+    pred_day_num: int = 1
+    seq_length: int = his_day_num*12
+    pred_length : int = pred_day_num*12
     lr : float = 1e-3
     log_path : str = log_path
     pic_path : str = pic_path
