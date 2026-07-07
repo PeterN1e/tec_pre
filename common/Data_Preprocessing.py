@@ -37,28 +37,8 @@ def inverse_transform_predictions(data,scaler):
     :param scaler:设定的标准化
     :return:
     """
-    #predictions:由[24,71,73]构成的列表
-    #actual[24,71,73]构成的列表
-    data_inv = []
-    #act_inv = []#创建的是列表
-    dim = data.ndim
-    if dim == 4:#说明传入的数据是 标准化后的tec图
-        for i in range(data.shape[0]):
-            data_cell = data[i,:,:,:]
-
-            original_shape = data_cell.shape
-            data_cell_2d = data_cell.reshape(original_shape[0],-1)#将数据转化为一行
-            data_inv_one=scaler.inverse_transform(data_cell_2d).reshape(original_shape)
-            #进行拼接
-            data_inv.append(data_inv_one)
-        data_inv = np.stack(data_inv,axis = 0)#axis等价为torch.stack中的dim
-    elif dim == 3:#说明传入的数据是 特征参数
-        for i in range(data.shape[0]):
-            aux = data[i,:,:]
-            data_inv_one = scaler.inverse_transform(aux)
-            #data_inv.append(np.concatenate((data[i,:,0].reshape(-1,1),data_inv_one),axis = 1))
-            data_inv.append(data_inv_one)
-        data_inv = np.stack(data_inv, axis=0)
-    else:
-        print("反标准化时参数维度传入错误")
+    original_shape = data.shape
+    data_cell_2d = data.reshape(original_shape[0],-1)#将数据转化为一行
+    data_inv=scaler.inverse_transform(data_cell_2d).reshape(original_shape)
+    #进行拼接
     return data_inv

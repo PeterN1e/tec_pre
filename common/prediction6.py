@@ -25,8 +25,7 @@ class TecPredict(nn.Module):
                 # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
                 batch_in_aux = batch_in_aux.float().to(self.device)
                 batch_exp_tec = batch_exp_tec.float().to(self.device)
-                batch_exp_aux = batch_exp_tec.float().to(self.device)
-
+                batch_exp_aux = batch_exp_aux.float().to(self.device)
                 output = self.model(batch_in_tec,batch_in_aux)
                 print(f"预测第{frame_num}组")
                 frame_num += 1

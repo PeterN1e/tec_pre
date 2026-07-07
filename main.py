@@ -20,6 +20,12 @@ import matplotlib.pyplot as plt
 cfg_model = ModelConfig()
 cfg_dataset = DatasetConfig()
 cfg_train = TrainConfig()
+plt.rcParams['font.sans-serif'] = [
+    'SimHei',  # Windows 黑体
+    'WenQuanYi Micro Hei',  # Linux 文泉驿
+]
+plt.rcParams['axes.unicode_minus'] = False
+
 
 def main():
     torch.manual_seed(42)
@@ -74,8 +80,7 @@ def main():
         optimizer,
         mode='min',
         factor=0.5,
-        patience=3,
-        verbose=True
+        patience=3
     )
     print("模型创建完成!")
     print(f"模型参数量:{sum(p.numel() for p in model.parameters() ):}")
@@ -148,7 +153,7 @@ def model_predict_only():
                      channel = 12
                      ).to(cfg_train.device)
     save_dir = cfg_model.model_name
-    model.load_state_dict(torch.load(os.path.join("model_dict",save_dir, "model_state_dict.pth"), map_location=cfg_train.device,weights_only=True))
+    model.load_state_dict(torch.load(os.path.join(r"save/model_dict",save_dir, "model_state_dict.pth"), map_location=cfg_train.device,weights_only=True))
 
     tec_predict = TecPredict(model,test_dataloader)
 
@@ -158,16 +163,16 @@ def model_predict_only():
     aux = inverse_transform_predictions(aux,aux_scaler)
     delta = act - pre
     delta_abs = np.abs(delta)   #计算绝对值
-    delta_average_one_hour = np.mean(delta_abs,axis =(2, 3) )#对单张差值取平均值
-    delta_average_one_day = np.mean(delta_average_one_hour,axis = 1)
+    delta_average_one_hour = np.mean(delta_abs,axis =(3, 4) )#对单张差值取平均值
+    delta_average_one_day = np.mean(delta_average_one_hour,axis = 2)
     datagram(delta_average_one_day)
 
     print(pre.shape,act.shape)
     print("预测完成")
     for i in range(10): #允许检索10次
-        retrival = int(input(f"输入检索值0~{pre.shape[0]-1}："))#输入的字符转换为数字
+        retrival = int(input(f"输入检索值0~{pre.shape[0]*pre.shape[1]}："))#输入的字符转换为数字
         if 0<=retrival<pre.shape[0]:
-            pic_show(act[retrival], pre[retrival], aux[retrival],delta[retrival])  # 引用“图片展示”实例
+            pic_show(act[retrival,0,0,:,:], pre[retrival,0,0,:,:], aux[retrival,0,0,:,:],delta[retrival,0,0,:,:])  # 引用“图片展示”实例
             print("完成绘制")
         else:
             print("输入错误")

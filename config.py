@@ -44,11 +44,11 @@ class ModelConfig:
 @dataclass
 class DatasetConfig:
     start_month_train = 200201
-    end_month_train = 200812
-    start_month_val = 200901
-    end_month_val = 200912
-    start_month_test = 201001
-    end_month_test = 201012
+    end_month_train = 200208
+    start_month_val = 200209
+    end_month_val = 200210
+    start_month_test = 200211
+    end_month_test = 200212
     aux_dim = 6
     tec_dir = dataset_base_path/"tec_ionex_npy/igsg"  # tec图cdf文件夹路径
     indices_dir = dataset_base_path/"indices"
