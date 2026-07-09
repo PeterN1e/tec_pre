@@ -164,20 +164,20 @@ def model_predict_only():
     delta = act - pre
     delta_abs = np.abs(delta)   #计算绝对值
     delta_average_one_hour = np.mean(delta_abs,axis =(3, 4) )#对单张差值取平均值
-    delta_average_one_day = np.mean(delta_average_one_hour,axis = 2)
-    datagram(delta_average_one_day)
+    delta_average_one_day = np.mean(delta_average_one_hour,axis =2)
+    delta_shape = delta_average_one_day.shape
+    datagram(delta_average_one_day.reshape(delta_shape[0]*delta_shape[1]))
 
     print(pre.shape,act.shape)
     print("预测完成")
     for i in range(10): #允许检索10次
         retrival = int(input(f"输入检索值0~{pre.shape[0]*pre.shape[1]}："))#输入的字符转换为数字
         if 0<=retrival<pre.shape[0]:
-            pic_show(act[retrival,0,0,:,:], pre[retrival,0,0,:,:], aux[retrival,0,0,:,:],delta[retrival,0,0,:,:])  # 引用“图片展示”实例
+            pic_show(act[retrival,0,:,:,:], pre[retrival,0,:,:,:], aux[retrival,0,:,:],delta[retrival,0,:,:,:])  # 引用“图片展示”实例
             print("完成绘制")
         else:
             print("输入错误")
             break
-
 if __name__ == "__main__":
     a = input("训练模式输入0，推理模式输入1：")
     if a=="0":
