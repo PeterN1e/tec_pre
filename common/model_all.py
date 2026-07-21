@@ -1,5 +1,7 @@
-from common.CNNDecoder4 import CnnDecoder
-from common.CNNEncoder2 import CnnEncoder
+# from common.CNNDecoder4 import CnnDecoder
+# from common.CNNEncoder2 import CnnEncoder
+from common.CoordGate.CoordGateEncoder2 import CnnEncoder
+from common.CoordGate.CoordGateDecoder4 import CnnDecoder
 from model_selector import Model_Predictor
 from config import TrainConfig
 from common.TokenFusion import FilmFusion

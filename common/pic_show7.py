@@ -1,33 +1,14 @@
 import matplotlib.pyplot as plt
-import numpy as np
-import os
-from matplotlib.gridspec import GridSpec
+
 from config import TrainConfig,ModelConfig
 cfg_model = ModelConfig()
 cfg_train = TrainConfig()
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
+plt.rcParams['font.sans-serif'] = [
+    'SimHei',  # Windows 黑体
+    'WenQuanYi Micro Hei',  # Linux 文泉驿
+]
 plt.rcParams['axes.unicode_minus'] = False
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 
 import numpy as np
 import matplotlib.pyplot as plt

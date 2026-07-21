@@ -105,8 +105,6 @@ def main():
 
     print("模型训练结束")
 
-    plt.rcParams['font.sans-serif']=['Microsoft YaHei', 'Arial Unicode MS']
-    plt.rcParams['axes.unicode_minus'] = False
     plt.figure(figsize=(24, 8))
     plt.subplot(1, 2, 1)
     plt.plot(train_losses, label='training loss')
