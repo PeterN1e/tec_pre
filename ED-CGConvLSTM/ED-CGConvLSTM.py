@@ -145,7 +145,7 @@ class ED_CGConvLSTM(nn.Module):
 
 # ========== 使用示例 ==========
 if __name__ == "__main__":
-    batch_size = 4
+    batch_size = 48
     seq_len = 12
     input_dim = 1
     hidden_dim = 60      # 论文贝叶斯优化结果

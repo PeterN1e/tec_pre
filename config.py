@@ -2,6 +2,9 @@ import torch
 from dataclasses import dataclass
 from pathlib import Path
 import platform
+
+import model_selector
+
 ###########################################
 # 获取当前 .py 文件所在的目录（）
 BASE_DIR = Path(__file__).resolve().parent
@@ -24,22 +27,32 @@ if platform.system() == "Windows":
 else:
     dataset_base_path = Path("/mnt/d/Dataset_tec_NLY")  # 或你的 Linux 挂载路径
 
+model_select = 1
+if model_select == 1:
+    model_name = "E_P_D"
+elif model_select == 2:
+    model_name = "ED-CGConvLSTM"
+else:
+    raise ValueError("模型不存在")
+
 n = 3
 if n == 1:
-    model_name = "transformer"
+    EPDmodel_name = "transformer"
 elif n == 2:
-    model_name = "tcn"
+    EPDmodel_name = "tcn"
 elif n == 3:
-    model_name = "convlstm"
+    EPDmodel_name = "convlstm"
 elif n == 4:
-    model_name = "convgru"
+    EPDmodel_name = "convgru"
+else:
+    raise ValueError("模型不存在")
 
 @dataclass
 class ModelConfig:
     transmit_parameter : int = 3  # 卷积编码层的通道数大小
     out_dim : int = 128  # 卷积编码层最终线性层的输出维度
     model_name: str = model_name
-
+    EPDmodel_name: str = EPDmodel_name
 
 @dataclass
 class DatasetConfig:

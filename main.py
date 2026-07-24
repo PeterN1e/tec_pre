@@ -62,20 +62,19 @@ def main():
     print("测试数据集总步长：", val_dataset.__len__())
     print(f"批次大小：{cfg_train.batch_size}")
 
-    model = ModelEPD(transmit_parameter = cfg_model.transmit_parameter,
+    model = Model(transmit_parameter = cfg_model.transmit_parameter,
                      history_len = cfg_train.seq_length,
                      predict_len = cfg_train.pred_length,
                      aux_dim = cfg_dataset.aux_dim,
                      channel = 12
                      ).to(cfg_train.device)
-    model = model.to(cfg_train.device)
 
+
+    model = model.to(cfg_train.device)
     criterion_mse = nn.MSELoss()
     criterion_mae = nn.L1Loss()
     criterion_l1smooth = nn.SmoothL1Loss()
-
     optimizer=optim.Adam(model.parameters(),lr = cfg_train.lr)   #优化器对象
-
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode='min',

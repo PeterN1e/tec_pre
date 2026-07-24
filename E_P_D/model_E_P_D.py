@@ -2,7 +2,7 @@
 # from common.CNNEncoder2 import CnnEncoder
 from E_P_D.CoordGate.CoordGateEncoder2 import CnnEncoder
 from E_P_D.CoordGate.CoordGateDecoder4 import CnnDecoder
-from model_selector import Model_Predictor
+from model_selector import EPD_Predictor
 from config import TrainConfig
 from common.TokenFusion import FilmFusion
 cfg_train = TrainConfig()
@@ -21,7 +21,7 @@ class ModelEPD(nn.Module):
         """
         super().__init__()
         self.encoder = CnnEncoder(transmit_parameter = transmit_parameter)
-        self.predictor = Model_Predictor(history_len = history_len,
+        self.predictor = EPD_Predictor(history_len = history_len,
                                          predict_len = predict_len)
         self.decoder = CnnDecoder(transmit_parameter_de = transmit_parameter)
         self.Fusion = FilmFusion(aux_dim = aux_dim,channel = channel)
