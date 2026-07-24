@@ -7,12 +7,12 @@ import joblib
 import torch.optim as optim
 import warnings
 from sklearn.preprocessing import MinMaxScaler
-from common.dataloader1 import TecDataset1,data_reader,TecIonosphereDataset
+from common.dataloader1 import TecIonosphereDataset
 from common.tec_train import TrainModel
 from common.pic_show7 import pic_show,datagram
-from common.model_all import ModelAll
+from E_P_D.model_E_P_D import ModelEPD
 from common.prediction6 import TecPredict
-from common.Data_Preprocessing import scale_tec_aux_data,inverse_transform_predictions
+from common.Data_Preprocessing import inverse_transform_predictions
 
 import os
 import matplotlib.pyplot as plt
@@ -62,7 +62,7 @@ def main():
     print("测试数据集总步长：", val_dataset.__len__())
     print(f"批次大小：{cfg_train.batch_size}")
 
-    model = ModelAll(transmit_parameter = cfg_model.transmit_parameter,
+    model = ModelEPD(transmit_parameter = cfg_model.transmit_parameter,
                      history_len = cfg_train.seq_length,
                      predict_len = cfg_train.pred_length,
                      aux_dim = cfg_dataset.aux_dim,
@@ -144,7 +144,7 @@ def model_predict_only():
         aux_scaler = aux_scaler
     )
     test_dataloader = DataLoader(test_dataset, batch_size=cfg_train.batch_size, shuffle=False, drop_last=True)
-    model = ModelAll(transmit_parameter = cfg_model.transmit_parameter,
+    model = ModelEPD(transmit_parameter = cfg_model.transmit_parameter,
                      history_len = cfg_train.seq_length,
                      predict_len = cfg_train.pred_length,
                      aux_dim = cfg_dataset.aux_dim,

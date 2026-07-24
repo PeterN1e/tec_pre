@@ -6,15 +6,15 @@ USE_MODEL = cfg_model.model_name
 
 # 统一导入对应模型
 if USE_MODEL == "transformer":
-    from PredictionModel.Transformer.transformerModule import TecPreTransformer as Model_Predictor
+    from E_P_D.PredictionModel.Transformer.transformerModule import TecPreTransformer as Model_Predictor
 elif USE_MODEL == "tcn":
-    from PredictionModel.TCN.tcnModule import TCNMiddlePredictor as Model_Predictor
+    from E_P_D.PredictionModel.TCN.tcnModule import TCNMiddlePredictor as Model_Predictor
 elif USE_MODEL == "convlstm":
-    from PredictionModel.LSTM.convLSTM.convLSTM import ConvLSTM as Model_Predictor
+    from E_P_D.PredictionModel.LSTM.convLSTM.convLSTM import ConvLSTM as Model_Predictor
 elif USE_MODEL == "convgru":
-    from PredictionModel.Gru.convGRU import ConvGRU as Model_Predictor
+    from E_P_D.PredictionModel.Gru.convGRU import ConvGRU as Model_Predictor
 else:
     raise ValueError("模型不存在")
 
-# 对外统一暴露一个类名：MyModel
+# 对外统一暴露一个类名：Model_Predictor
 __all__ = ["Model_Predictor"]
