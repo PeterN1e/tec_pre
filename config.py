@@ -45,12 +45,7 @@ elif n == 4:
 else:
     raise ValueError("模型不存在")
 
-@dataclass
-class EPDConfig:
-    transmit_parameter : int = 3  # 卷积编码层的通道数大小
-    out_dim : int = 128  # 卷积编码层最终线性层的输出维度
-    model_name: str = model_name
-    EPDmodel_name: str = EPDmodel_name
+
 
 @dataclass
 class DatasetConfig:
@@ -71,7 +66,7 @@ class TrainConfig:
     input_day_num: int = 3
     output_day_num: int = 1
     input_length: int = input_day_num*12
-    output_day_num : int = output_day_num*12
+    output_length : int = output_day_num*12
     lr : float = 1e-3
     log_path : str = log_path
     pic_path : str = pic_path
@@ -80,8 +75,16 @@ class TrainConfig:
 
 @dataclass
 class EDCGConvLSTMConfig:
-    num_layers = 4
-    kernel_size = 3
-    hidden_dim = 60
-    H, W = 71, 73
-
+    input_dim: int = 1
+    output_dim: int = 1
+    num_layers: int = 4
+    kernel_size: int = 3
+    hidden_dim: int = 60
+    H : int =  71
+    W : int = 73
+@dataclass
+class EPDConfig:
+    transmit_parameter : int = 3  # 卷积编码层的通道数大小
+    out_dim : int = 128  # 卷积编码层最终线性层的输出维度
+    model_name: str = model_name
+    EPDmodel_name: str = EPDmodel_name

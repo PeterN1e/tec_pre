@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-from config import EDCGConvLSTMConfig
+from config import EDCGConvLSTMConfig,TrainConfig
 cfg_model = EDCGConvLSTMConfig()
+cfg_train = TrainConfig()
 class CoordGate(nn.Module):
     """空间感知卷积模块，保持空间分辨率不变"""
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=None):
@@ -95,9 +96,15 @@ class CGConvLSTM(nn.Module):
         return outputs, (h, c)
 
 
-class ED_CGConvLSTM(nn.Module):
+class EDCGConvLSTM(nn.Module):
     """编码器-解码器CGConvLSTM，支持输入步长和输出步长不同"""
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, kernel_size, input_length, output_length):
+    def __init__(self, input_dim = cfg_model.input_dim,
+                 hidden_dim = cfg_model.hidden_dim,
+                 output_dim = cfg_model.output_dim,
+                 num_layers = cfg_model.num_layers,
+                 kernel_size = cfg_model.num_layers,
+                 input_length = cfg_train.input_length,
+                 output_length = cfg_train.output_length):
         super().__init__()
         self.input_length = input_length          # 历史输入步数，如36
         self.output_length = output_length        # 预测输出步数，如12
@@ -132,7 +139,7 @@ class ED_CGConvLSTM(nn.Module):
         outputs = []
 
         # 固定输出长度 out_len 步
-        for t in range(self.out_len):
+        for t in range(self.output_length):
             # 教师强制（训练时）
             if target is not None and torch.rand(1).item() < teacher_forcing_ratio:
                 # target 形状应为 (B, out_len, output_dim, H, W)
@@ -165,7 +172,7 @@ if __name__ == "__main__":
     input_length = 36
     output_length = 12
 
-    model = ED_CGConvLSTM(input_dim, hidden_dim, output_dim, num_layers, kernel_size, input_length,output_length)
+    model = EDCGConvLSTM(input_dim, hidden_dim, output_dim, num_layers, kernel_size, input_length,output_length)
     x = torch.randn(batch_size, seq_len, input_dim, H, W)
     pred = model(x)      # 测试前向传播
     print("预测输出形状:", pred.shape)   # 应为 (4, 12, 1, 71, 73)
