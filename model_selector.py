@@ -18,8 +18,8 @@ else:
 
 if MODEL == "E_P_D":
     from E_P_D.model_E_P_D import ModelEPD as Model
-elif MODEL == "ED-CGConvLSTM":
-    from ED-CGConvLSTM.ED-CGConvLSTM import ED_CGConvLSTM as Model
+elif MODEL == "ED_CGConvLSTM":
+    from ED_CGConvLSTM.ED_CGConvLSTM import ED_CGConvLSTM as Model
 else:
     raise ValueError("模型不存在")
 

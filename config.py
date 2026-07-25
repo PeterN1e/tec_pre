@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import platform
 
-import model_selector
-
 ###########################################
 # 获取当前 .py 文件所在的目录（）
 BASE_DIR = Path(__file__).resolve().parent
@@ -31,7 +29,7 @@ model_select = 1
 if model_select == 1:
     model_name = "E_P_D"
 elif model_select == 2:
-    model_name = "ED-CGConvLSTM"
+    model_name = "ED_CGConvLSTM"
 else:
     raise ValueError("模型不存在")
 
@@ -48,7 +46,7 @@ else:
     raise ValueError("模型不存在")
 
 @dataclass
-class ModelConfig:
+class EPDConfig:
     transmit_parameter : int = 3  # 卷积编码层的通道数大小
     out_dim : int = 128  # 卷积编码层最终线性层的输出维度
     model_name: str = model_name
@@ -70,12 +68,20 @@ class DatasetConfig:
 class TrainConfig:
     epochs_num: int = 10
     batch_size: int = 24
-    his_day_num: int = 3
-    pred_day_num: int = 1
-    seq_length: int = his_day_num*12
-    pred_length : int = pred_day_num*12
+    input_day_num: int = 3
+    output_day_num: int = 1
+    input_length: int = input_day_num*12
+    output_day_num : int = output_day_num*12
     lr : float = 1e-3
     log_path : str = log_path
     pic_path : str = pic_path
     model_path : str = model_path
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+@dataclass
+class EDCGConvLSTMConfig:
+    num_layers = 4
+    kernel_size = 3
+    hidden_dim = 60
+    H, W = 71, 73
+

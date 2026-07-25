@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
+from config import EDCGConvLSTMConfig
+cfg_model = EDCGConvLSTMConfig()
 class CoordGate(nn.Module):
     """空间感知卷积模块，保持空间分辨率不变"""
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=None):
@@ -96,10 +96,11 @@ class CGConvLSTM(nn.Module):
 
 
 class ED_CGConvLSTM(nn.Module):
-    """编码器-解码器CGConvLSTM预测模型"""
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, kernel_size, seq_len):
+    """编码器-解码器CGConvLSTM，支持输入步长和输出步长不同"""
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, kernel_size, input_length, output_length):
         super().__init__()
-        self.seq_len = seq_len
+        self.input_length = input_length          # 历史输入步数，如36
+        self.output_length = output_length        # 预测输出步数，如12
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.num_layers = num_layers
@@ -109,37 +110,45 @@ class ED_CGConvLSTM(nn.Module):
         self.conv_out = nn.Conv2d(hidden_dim, output_dim, kernel_size=1)
         self.map_to_hidden = nn.Conv2d(output_dim, hidden_dim, kernel_size=1)
 
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
     def forward(self, x, target=None, teacher_forcing_ratio=0.0):
-        # x: (B, T, C_in, H, W)
-        B, T, C, H, W = x.shape
-        # 编码
+        # x: (B, T_in, C_in, H, W) ，T_in 理论上应等于 self.input_length，但实际可灵活
+        B, T_in, C, H, W = x.shape
+        # 编码整个输入序列
         _, (h_enc, c_enc) = self.encoder(x)
 
-        # 解码器初始状态：取编码器各层的最终状态
+        # 解码器初始状态：编码器各层的最终状态
         h_dec = [h_enc[l] for l in range(self.num_layers)]
         c_dec = [c_enc[l] for l in range(self.num_layers)]
 
-        # 初始输入（全零，尺寸为隐藏维度）
+        # 初始输入为零张量
         dec_input = torch.zeros(B, self.hidden_dim, H, W, device=x.device)
         outputs = []
 
-        for t in range(T):
-            # 教师强制：若提供target且随机概率小于阈值，则使用目标值
+        # 固定输出长度 out_len 步
+        for t in range(self.out_len):
+            # 教师强制（训练时）
             if target is not None and torch.rand(1).item() < teacher_forcing_ratio:
-                # target[:, t, ...] 形状 (B, output_dim, H, W)
+                # target 形状应为 (B, out_len, output_dim, H, W)
                 dec_input = self.map_to_hidden(target[:, t, ...])
 
-            # 单步解码（输入需增加时间维）
+            # 单步解码
             dec_input_seq = dec_input.unsqueeze(1)   # (B, 1, hidden_dim, H, W)
             _, (h_dec, c_dec) = self.decoder(dec_input_seq, (h_dec, c_dec))
-            h_out = h_dec[-1]                        # 最后一层隐藏状态
+            h_out = h_dec[-1]
             pred = self.conv_out(h_out)              # (B, output_dim, H, W)
             outputs.append(pred.unsqueeze(1))
 
-            # 更新下一时刻的输入：将当前预测映射回隐空间
+            # 更新下一时刻的输入（自回归）
             dec_input = self.map_to_hidden(pred)
 
-        outputs = torch.cat(outputs, dim=1)          # (B, T, output_dim, H, W)
+        outputs = torch.cat(outputs, dim=1)          # (B, out_len, output_dim, H, W)
         return outputs
 
 
@@ -153,8 +162,10 @@ if __name__ == "__main__":
     num_layers = 4
     kernel_size = 3
     H, W = 71, 73
+    input_length = 36
+    output_length = 12
 
-    model = ED_CGConvLSTM(input_dim, hidden_dim, output_dim, num_layers, kernel_size, seq_len)
+    model = ED_CGConvLSTM(input_dim, hidden_dim, output_dim, num_layers, kernel_size, input_length,output_length)
     x = torch.randn(batch_size, seq_len, input_dim, H, W)
     pred = model(x)      # 测试前向传播
     print("预测输出形状:", pred.shape)   # 应为 (4, 12, 1, 71, 73)
