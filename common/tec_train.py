@@ -1,10 +1,7 @@
 import torch
-import torch.nn as nn
-from config import TrainConfig,DatasetConfig,ModelConfig
-
+from config import TrainConfig,DatasetConfig
 cfg_train = TrainConfig
 cfg_dataset = DatasetConfig
-cfg_model = ModelConfig
 
 import os  #处理文件和目录
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -55,9 +52,9 @@ class TrainModel:
         self.criterion = criterion
         self.optimizer = optimizer
         self.batch_size = cfg_train.batch_size
-        self.model_name = cfg_model.model_name
-        self.seq_length = cfg_train.seq_length
-        self.pred_length = cfg_train.pred_length
+        self.model_name = cfg_train.model_name
+        self.input_length = cfg_train.input_length
+        self.output_length = cfg_train.output_length
         self.start_month_train = cfg_dataset.start_month_train
         self.end_month_train = cfg_dataset.end_month_train
         self.device = cfg_train.device
@@ -74,7 +71,7 @@ class TrainModel:
         test_losses=[]
         logger.info(f'------batch_size {self.batch_size:3d}| '
                     f'model: {self.model_name}| '
-                    f'seq_length:{self.seq_length:3d}  pred_length:{self.pred_length:3d}'
+                    f'seq_length:{self.input_length:3d}  pred_length:{self.output_length:3d}'
                     f'所用数据集:{self.start_month_train:3d}-{self.end_month_train:3d}'
                     )
 

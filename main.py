@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from config import ModelConfig,DatasetConfig,TrainConfig
+from config import DatasetConfig,TrainConfig
 import numpy as np
 from torch.utils.data import DataLoader
 import joblib
@@ -10,14 +10,13 @@ from sklearn.preprocessing import MinMaxScaler
 from common.dataloader1 import TecIonosphereDataset
 from common.tec_train import TrainModel
 from common.pic_show7 import pic_show,datagram
-from E_P_D.model_E_P_D import ModelEPD
+from model_selector import ModelAll
 from common.prediction6 import TecPredict
 from common.Data_Preprocessing import inverse_transform_predictions
 
 import os
 import matplotlib.pyplot as plt
 
-cfg_model = ModelConfig()
 cfg_dataset = DatasetConfig()
 cfg_train = TrainConfig()
 plt.rcParams['font.sans-serif'] = [
@@ -39,7 +38,7 @@ def main():
     tec_dir=cfg_dataset.tec_dir,
     indices_dir=cfg_dataset.indices_dir,
     start_month=cfg_dataset.start_month_train, end_month=cfg_dataset.end_month_train,
-    his_day_num=cfg_train.his_day_num,
+    input_day_num=cfg_train.input_day_num,
     is_train = True,
     tec_scaler = tec_scaler,
     aux_scaler = aux_scaler
@@ -49,7 +48,7 @@ def main():
     tec_dir=cfg_dataset.tec_dir,
     indices_dir=cfg_dataset.indices_dir,
     start_month=cfg_dataset.start_month_val, end_month=cfg_dataset.end_month_val,
-    his_day_num=cfg_train.his_day_num,
+    input_day_num=cfg_train.input_day_num,
     is_train=False,
     tec_scaler = tec_scaler,
     aux_scaler = aux_scaler
@@ -62,14 +61,7 @@ def main():
     print("测试数据集总步长：", val_dataset.__len__())
     print(f"批次大小：{cfg_train.batch_size}")
 
-    model = Model(transmit_parameter = cfg_model.transmit_parameter,
-                     history_len = cfg_train.seq_length,
-                     predict_len = cfg_train.pred_length,
-                     aux_dim = cfg_dataset.aux_dim,
-                     channel = 12
-                     ).to(cfg_train.device)
-
-
+    model = ModelAll()
     model = model.to(cfg_train.device)
     criterion_mse = nn.MSELoss()
     criterion_mae = nn.L1Loss()
@@ -85,8 +77,8 @@ def main():
     print(f"模型参数量:{sum(p.numel() for p in model.parameters() ):}")
     print("开始训练模型...")
 
-    if not os.path.exists(os.path.join(cfg_train.model_path,cfg_model.model_name)): #模型存放位置
-        os.makedirs(os.path.join(cfg_train.model_path,cfg_model.model_name))
+    if not os.path.exists(os.path.join(cfg_train.model_path,cfg_train.model_name)): #模型存放位置
+        os.makedirs(os.path.join(cfg_train.model_path,cfg_train.model_name))
 
     tec_train = TrainModel(model = model,
                            train_loader = train_dataloader,
@@ -95,7 +87,7 @@ def main():
                            optimizer =optimizer,
                            scheduler =scheduler,
                            save_best = True,
-                           model_save_path = os.path.join(cfg_train.model_path,cfg_model.model_name, "model_state_dict.pth"))
+                           model_save_path = os.path.join(cfg_train.model_path,cfg_train.model_name, "model_state_dict.pth"))
     train_losses, test_losses = tec_train.train(cfg_train.epochs_num)
 
 #############保存和标准化映射关系
@@ -124,7 +116,7 @@ def main():
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     os.makedirs(cfg_train.pic_path, exist_ok=True)
-    file_path = os.path.join(cfg_train.pic_path, f'{cfg_model.model_name}train_loss.png')
+    file_path = os.path.join(cfg_train.pic_path, f'{cfg_train.model_name}train_loss.png')
     plt.savefig(file_path)
     plt.show()
 
@@ -137,19 +129,14 @@ def model_predict_only():
         tec_dir=cfg_dataset.tec_dir,
         indices_dir=cfg_dataset.indices_dir,
         start_month=cfg_dataset.start_month_test, end_month=cfg_dataset.end_month_test,
-        his_day_num=cfg_train.his_day_num,
+        input_day_num=cfg_train.input_day_num,
         is_train=False,
         tec_scaler = tec_scaler,
         aux_scaler = aux_scaler
     )
     test_dataloader = DataLoader(test_dataset, batch_size=cfg_train.batch_size, shuffle=False, drop_last=True)
-    model = ModelEPD(transmit_parameter = cfg_model.transmit_parameter,
-                     history_len = cfg_train.seq_length,
-                     predict_len = cfg_train.pred_length,
-                     aux_dim = cfg_dataset.aux_dim,
-                     channel = 12
-                     ).to(cfg_train.device)
-    save_dir = cfg_model.model_name
+    model =Model()
+    save_dir = cfg_train.model_name
     model.load_state_dict(torch.load(os.path.join(r"save/model_dict",save_dir, "model_state_dict.pth"), map_location=cfg_train.device,weights_only=True))
 
     tec_predict = TecPredict(model,test_dataloader)

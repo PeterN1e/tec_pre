@@ -3,35 +3,30 @@
 from E_P_D.CoordGate.CoordGateEncoder2 import CnnEncoder
 from E_P_D.CoordGate.CoordGateDecoder4 import CnnDecoder
 from model_selector import EPD_Predictor
-from config import TrainConfig
-from common.TokenFusion import FilmFusion
+from config import TrainConfig,EPDConfig,DatasetConfig
+from common.DataFusion import FilmFusion
 cfg_train = TrainConfig()
+EPD_cfg = EPDConfig()
+DatasetCfg = DatasetConfig()
 import torch.nn as nn
 class ModelEPD(nn.Module):
     def __init__(self,
-                 transmit_parameter,
-                 predict_len,
-                 history_len,
-                 aux_dim,
-                 channel):
+                 transmit_parameter = EPD_cfg.transmit_parameter,
+                 input_length = cfg_train.input_length,
+                 output_length = cfg_train.output_length,
+                 aux_dim = DatasetCfg.aux_dim,
+                 ):
         """
         :param transmit_parameter:
-        :param predict_len:
-        :param history_len:
+        :param output_length:
+        :param input_length:
         """
         super().__init__()
         self.encoder = CnnEncoder(transmit_parameter = transmit_parameter)
-        self.predictor = EPD_Predictor(history_len = history_len,
-                                         predict_len = predict_len)
+        self.predictor = EPD_Predictor(history_len = input_length,
+                                         predict_len = output_length)
         self.decoder = CnnDecoder(transmit_parameter_de = transmit_parameter)
-        self.Fusion = FilmFusion(aux_dim = aux_dim,channel = channel)
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        for p in self.parameters():#遍历模型内所有参数
-            if p.dim()>1:
-                nn.init.xavier_uniform_(p)
-
+        self.Fusion = FilmFusion(aux_dim = aux_dim)
     def forward(self,tec24,aux):
         """
         :param tec24: (batch_size,seq_length,71,73)

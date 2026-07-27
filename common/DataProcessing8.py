@@ -1,5 +1,4 @@
-from config import ModelConfig,DatasetConfig,TrainConfig
-cfg_model = ModelConfig()
+from config import DatasetConfig,TrainConfig
 cfg_dataset = DatasetConfig()
 cfg_train = TrainConfig()
 import numpy as np
@@ -27,16 +26,16 @@ def data_evaluation(data):
 
 
 def data_save(data):  #存入数据,格式为数组
-    if not os.path.exists(f"Summarization_data\\{cfg_train.seq_length}to{cfg_train.pred_length}"):
-        os.makedirs(f"Summarization_data\\{cfg_train.seq_length}to{cfg_train.pred_length}")
-    np.savez(f"Summarization_data\\{cfg_train.seq_length}to{cfg_train.pred_length}\\{cfg_model.model_name}_data", a=data)
+    if not os.path.exists(f"Summarization_data\\{cfg_train.input_length}to{cfg_train.output_length}"):
+        os.makedirs(f"Summarization_data\\{cfg_train.input_length}to{cfg_train.output_length}")
+    np.savez(f"Summarization_data\\{cfg_train.input_length}to{cfg_train.output_length}\\{cfg_train.model_name}_data", a=data)
 
 def data_loaded():#导出数据
 
     data = []
-    data_list = listdir(f"Summarization_data\\{cfg_train.seq_length}to{cfg_train.pred_length}")
+    data_list = listdir(f"Summarization_data\\{cfg_train.input_length}to{cfg_train.output_length}")
     for i in range(len(data_list)):
-        data_cell = np.load(f"Summarization_data\\{cfg_train.pred_length}to{cfg_train.pred_length}\\{data_list[i]}", allow_pickle=True)
+        data_cell = np.load(f"Summarization_data\\{cfg_train.input_length}to{cfg_train.output_length}\\{data_list[i]}", allow_pickle=True)
         data_cell = data_cell['a']
         data.append(data_cell)
         data_list[i] = data_list[i].split('_')[0]

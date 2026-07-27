@@ -1,36 +1,47 @@
 import torch
 import torch.nn as nn
-from config import EDCGConvLSTMConfig,TrainConfig
+from config import EDCGConvLSTMConfig, TrainConfig
+
 cfg_model = EDCGConvLSTMConfig()
 cfg_train = TrainConfig()
+
+
+# ========== 坐标网格工具函数（全局只算一次）==========
+def _build_coord_grid(H, W, device):
+    """生成归一化坐标网格 (2, H, W)，由外部按需调用，避免每个 CoordGate 重复创建"""
+    yy, xx = torch.meshgrid(
+        torch.linspace(0, 1, H, device=device),
+        torch.linspace(0, 1, W, device=device),
+        indexing='ij'
+    )
+    return torch.stack([xx, yy], dim=0)   # (2, H, W)
+
+
+# ========== CoordGate ==========
 class CoordGate(nn.Module):
     """空间感知卷积模块，保持空间分辨率不变"""
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=None):
         super().__init__()
         if padding is None:
-            padding = kernel_size // 2   # 保持输出尺寸与输入相同
+            padding = kernel_size // 2
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
         self.coord_encoder = nn.Conv2d(2, out_channels, kernel_size=1)
 
-    def forward(self, x):
-        # x: (B, C_in, H, W)
-        B, _, H, W = x.shape
-        F_map = self.conv(x)  # (B, C_out, H, W) 由于padding设置，尺寸不变
-
-        # 生成归一化坐标图 (0~1)
-        yy, xx = torch.meshgrid(
-            torch.linspace(0, 1, H, device=x.device),
-            torch.linspace(0, 1, W, device=x.device),
-            indexing='ij'
-        )
-        coord = torch.stack([xx, yy], dim=0).unsqueeze(0).expand(B, -1, -1, -1)  # (B, 2, H, W)
-        G = self.coord_encoder(coord)              # (B, C_out, H, W)
+    def forward(self, x, coord_grid):
+        """
+        x:          (B, C_in, H, W)
+        coord_grid: (2, H, W) —— 由外部统一提供，全局只算一次
+        """
+        B = x.shape[0]
+        F_map = self.conv(x)
+        G = self.coord_encoder(coord_grid.unsqueeze(0).expand(B, -1, -1, -1))
         G = torch.sigmoid(G)
         return F_map * G
 
 
+# ========== CGConvLSTMCell ==========
 class CGConvLSTMCell(nn.Module):
-    """CGConvLSTM单元，所有卷积替换为CoordGate"""
+    """CGConvLSTM 单元，所有卷积替换为 CoordGate"""
     def __init__(self, input_dim, hidden_dim, kernel_size, padding=None):
         super().__init__()
         self.hidden_dim = hidden_dim
@@ -49,19 +60,18 @@ class CGConvLSTMCell(nn.Module):
         self.W_xo = CoordGate(input_dim, hidden_dim, kernel_size, padding=padding)
         self.W_ho = CoordGate(hidden_dim, hidden_dim, kernel_size, padding=padding)
 
-    def forward(self, x, h_prev, c_prev):
-        # x, h_prev, c_prev: (B, C, H, W)
-        i = torch.sigmoid(self.W_xi(x) + self.W_hi(h_prev))
-        f = torch.sigmoid(self.W_xf(x) + self.W_hf(h_prev))
-        c_tilde = torch.tanh(self.W_xc(x) + self.W_hc(h_prev))
-        c = f * c_prev + i * c_tilde
-        o = torch.sigmoid(self.W_xo(x) + self.W_ho(h_prev))
-        h = o * torch.tanh(c)
+    def forward(self, x, h_prev, c_prev, coord_grid):
+        i  = torch.sigmoid(self.W_xi(x, coord_grid) + self.W_hi(h_prev, coord_grid))
+        f  = torch.sigmoid(self.W_xf(x, coord_grid) + self.W_hf(h_prev, coord_grid))
+        c_ = torch.tanh(   self.W_xc(x, coord_grid) + self.W_hc(h_prev, coord_grid))
+        c  = f * c_prev + i * c_
+        o  = torch.sigmoid(self.W_xo(x, coord_grid) + self.W_ho(h_prev, coord_grid))
+        h  = o * torch.tanh(c)
         return h, c
 
 
+# ========== CGConvLSTM（多层，处理完整序列）==========
 class CGConvLSTM(nn.Module):
-    """多层CGConvLSTM，处理完整序列"""
     def __init__(self, input_dim, hidden_dim, num_layers, kernel_size, padding=None):
         super().__init__()
         self.num_layers = num_layers
@@ -76,6 +86,10 @@ class CGConvLSTM(nn.Module):
     def forward(self, x, states=None):
         # x: (B, T, C_in, H, W)
         B, T, C, H, W = x.shape
+
+        # ★ 只计算一次坐标网格
+        coord_grid = _build_coord_grid(H, W, x.device)
+
         if states is None:
             h = [torch.zeros(B, self.hidden_dim, H, W, device=x.device) for _ in range(self.num_layers)]
             c = [torch.zeros(B, self.hidden_dim, H, W, device=x.device) for _ in range(self.num_layers)]
@@ -84,30 +98,31 @@ class CGConvLSTM(nn.Module):
 
         outputs = []
         for t in range(T):
-            x_t = x[:, t, ...]          # (B, C, H, W)
-            layer_outputs = []          # 当前时间步各层输出，用于层间传递
+            x_t = x[:, t, ...]
+            layer_outputs = []
             for l in range(self.num_layers):
-                inp = x_t if l == 0 else layer_outputs[-1]   # 同一时间步上一层的输出
-                h[l], c[l] = self.cells[l](inp, h[l], c[l])
+                inp = x_t if l == 0 else layer_outputs[-1]
+                h[l], c[l] = self.cells[l](inp, h[l], c[l], coord_grid)
                 layer_outputs.append(h[l])
-            outputs.append(h[-1].unsqueeze(1))   # 最后一层输出作为该时间步最终输出
+            outputs.append(h[-1].unsqueeze(1))
 
-        outputs = torch.cat(outputs, dim=1)      # (B, T, hidden_dim, H, W)
+        outputs = torch.cat(outputs, dim=1)
         return outputs, (h, c)
 
 
+# ========== EDCGConvLSTM ==========
 class EDCGConvLSTM(nn.Module):
-    """编码器-解码器CGConvLSTM，支持输入步长和输出步长不同"""
-    def __init__(self, input_dim = cfg_model.input_dim,
-                 hidden_dim = cfg_model.hidden_dim,
-                 output_dim = cfg_model.output_dim,
-                 num_layers = cfg_model.num_layers,
-                 kernel_size = cfg_model.num_layers,
-                 input_length = cfg_train.input_length,
-                 output_length = cfg_train.output_length):
+    """编码器-解码器 CGConvLSTM"""
+    def __init__(self, input_dim=cfg_model.input_dim,
+                 hidden_dim=cfg_model.hidden_dim,
+                 output_dim=cfg_model.output_dim,
+                 num_layers=cfg_model.num_layers,
+                 kernel_size=cfg_model.kernel_size,       # ★ 修复：原来是 cfg_model.num_layers
+                 input_length=cfg_train.input_length,
+                 output_length=cfg_train.output_length):
         super().__init__()
-        self.input_length = input_length          # 历史输入步数，如36
-        self.output_length = output_length        # 预测输出步数，如12
+        self.input_length = input_length
+        self.output_length = output_length
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.num_layers = num_layers
@@ -116,63 +131,56 @@ class EDCGConvLSTM(nn.Module):
         self.decoder = CGConvLSTM(hidden_dim, hidden_dim, num_layers, kernel_size)
         self.conv_out = nn.Conv2d(hidden_dim, output_dim, kernel_size=1)
         self.map_to_hidden = nn.Conv2d(output_dim, hidden_dim, kernel_size=1)
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
-
     def forward(self, x, target=None, teacher_forcing_ratio=0.0):
-        # x: (B, T_in, C_in, H, W) ，T_in 理论上应等于 self.input_length，但实际可灵活
+        # x: (B, T_in, C_in, H, W)
         B, T_in, C, H, W = x.shape
-        # 编码整个输入序列
+
+        # 编码
         _, (h_enc, c_enc) = self.encoder(x)
 
-        # 解码器初始状态：编码器各层的最终状态
-        h_dec = [h_enc[l] for l in range(self.num_layers)]
-        c_dec = [c_enc[l] for l in range(self.num_layers)]
+        # 解码器初始状态
+        h_dec = [h_enc[l].clone() for l in range(self.num_layers)]
+        c_dec = [c_enc[l].clone() for l in range(self.num_layers)]
 
-        # 初始输入为零张量
+        # 初始解码输入
         dec_input = torch.zeros(B, self.hidden_dim, H, W, device=x.device)
         outputs = []
 
-        # 固定输出长度 out_len 步
         for t in range(self.output_length):
-            # 教师强制（训练时）
+            # 教师强制
             if target is not None and torch.rand(1).item() < teacher_forcing_ratio:
-                # target 形状应为 (B, out_len, output_dim, H, W)
                 dec_input = self.map_to_hidden(target[:, t, ...])
 
             # 单步解码
-            dec_input_seq = dec_input.unsqueeze(1)   # (B, 1, hidden_dim, H, W)
+            dec_input_seq = dec_input.unsqueeze(1)
             _, (h_dec, c_dec) = self.decoder(dec_input_seq, (h_dec, c_dec))
             h_out = h_dec[-1]
-            pred = self.conv_out(h_out)              # (B, output_dim, H, W)
+            pred = self.conv_out(h_out)
             outputs.append(pred.unsqueeze(1))
 
-            # 更新下一时刻的输入（自回归）
+            # 自回归
             dec_input = self.map_to_hidden(pred)
 
-        outputs = torch.cat(outputs, dim=1)          # (B, out_len, output_dim, H, W)
+        outputs = torch.cat(outputs, dim=1)
         return outputs
 
 
-# ========== 使用示例 ==========
+# ========== 测试 ==========
 if __name__ == "__main__":
     batch_size = 48
-    seq_len = 12
+    seq_len = 36
     input_dim = 1
-    hidden_dim = 60      # 论文贝叶斯优化结果
+    hidden_dim = 60
     output_dim = 1
     num_layers = 4
     kernel_size = 3
     H, W = 71, 73
-    input_length = 36
-    output_length = 12
 
-    model = EDCGConvLSTM(input_dim, hidden_dim, output_dim, num_layers, kernel_size, input_length,output_length)
-    x = torch.randn(batch_size, seq_len, input_dim, H, W)
-    pred = model(x)      # 测试前向传播
-    print("预测输出形状:", pred.shape)   # 应为 (4, 12, 1, 71, 73)
+    model = EDCGConvLSTM().to(cfg_train.device)
+    x = torch.randn(batch_size, seq_len, input_dim, H, W,device=cfg_train.device)
+
+    # ★ 推理测试时关闭 autograd，内存从 ~20GB 降到几百 MB
+    with torch.no_grad():
+        pred = model(x)
+
+    print("预测输出形状:", pred.shape)   # (48, 12, 1, 71, 73)

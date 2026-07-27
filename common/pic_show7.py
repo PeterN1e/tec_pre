@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 
-from config import TrainConfig,ModelConfig
-cfg_model = ModelConfig()
+from config import TrainConfig
 cfg_train = TrainConfig()
 plt.rcParams['font.sans-serif'] = [
     'SimHei',  # Windows 黑体
@@ -43,7 +42,6 @@ def pic_show(act, pre, aux, delta):
 
     # 行标题（放在每行首部）
     row_titles = ["真实图", "预测图", "差值图"]
-
     for i in range(picture_num):
         # ---- 第1行：真实图 ----
         ax1 = fig.add_subplot(gs[0, i])
@@ -69,7 +67,7 @@ def pic_show(act, pre, aux, delta):
         ax3 = fig.add_subplot(gs[2, i])
         im3 = ax3.pcolormesh(lon, lat, delta[i, :, :],
                              shading='auto', cmap='jet',
-                             vmin=-vmax_error, vmax=vmax_error)
+                             vmin=-float(vmax_error), vmax=float(vmax_error))
         # 子图中间显示平均绝对误差
         average = np.mean(np.abs(delta[i, :, :]))
         ax3.set_title(f"MAE:{average:.2f}", loc='center', fontsize=8)

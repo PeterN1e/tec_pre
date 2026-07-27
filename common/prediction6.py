@@ -11,7 +11,6 @@ class TecPredict(nn.Module):
         self.device = cfg_train.device
     def forward(self,frame_num=1):
         """
-
         :param frame_num: 预测的帧数
         :return: 实际值和预测值
         """

@@ -1,5 +1,5 @@
 import cdflib
-from torch.utils.data import Dataset,DataLoader
+from torch.utils.data import Dataset
 from os import listdir
 import os
 import numpy as np
@@ -56,14 +56,14 @@ class TecIonosphereDataset(Dataset):
                  indices_dir,  # 存放 2005_indices.csv 的文件夹
                  start_month=200201,  # 数据集起始年月（如200201）
                  end_month=201012,  # 数据集结束年月
-                 his_day_num=3,  # 用k天作为输入
+                 input_day_num=3,  # 用k天作为输入
                  is_train=False,
                  tec_scaler=None,
                  aux_scaler=None):
         super().__init__()
         self.tec_dir = tec_dir
         self.indices_dir = indices_dir
-        self.his_day_num = his_day_num
+        self.input_day_num = input_day_num
         self.is_train = is_train
         self.tec_scaler = tec_scaler
         self.aux_scaler = aux_scaler
@@ -119,7 +119,7 @@ class TecIonosphereDataset(Dataset):
                 self.global_idx += 1
         self.total_steps = self.global_idx
         # 修正样本数：输入长度 + 预测长度 不能超过总步数
-        self.valid_samples = self.total_steps - self.his_day_num * 12 - 12 + 1
+        self.valid_samples = self.total_steps - self.input_day_num * 12 - 12 + 1
 
         # ===================== 训练集专属：预加载+拟合Scaler =====================
         if self.is_train:
@@ -178,14 +178,14 @@ class TecIonosphereDataset(Dataset):
     def __getitem__(self, idx):
         # 输入序列：his_day_num 天
         tec_seq, phys_seq = [], []
-        for i in range(self.his_day_num * 12):
+        for i in range(self.input_day_num * 12):
             tec, phys = self._get_step_data(idx + i)
             tec_seq.append(tec)
             phys_seq.append(phys)
 
         # 标签序列：未来1天（12步）
         tec_label, phys_label = [], []
-        for i in range(self.his_day_num * 12, self.his_day_num * 12 + 12):
+        for i in range(self.input_day_num * 12, self.input_day_num * 12 + 12):
             tec, phys = self._get_step_data(idx + i)
             tec_label.append(tec)
             phys_label.append(phys)
@@ -210,4 +210,4 @@ class TecIonosphereDataset(Dataset):
         )
 
 if __name__ == "__main__":
-    tec = TecIonosphereDataset(r"D:\Dataset_tec_NLY\tec_ionex_npy\igsg",r"D:\Dataset_tec_NLY\indices")
+    tec1 = TecIonosphereDataset(r"D:\Dataset_tec_NLY\tec_ionex_npy\igsg",r"D:\Dataset_tec_NLY\indices")

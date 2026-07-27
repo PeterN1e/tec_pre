@@ -25,7 +25,7 @@ if platform.system() == "Windows":
 else:
     dataset_base_path = Path("/mnt/d/Dataset_tec_NLY")  # 或你的 Linux 挂载路径
 
-model_select = 1
+model_select = 2
 if model_select == 1:
     model_name = "E_P_D"
 elif model_select == 2:
@@ -45,7 +45,9 @@ elif n == 4:
 else:
     raise ValueError("模型不存在")
 
-
+@dataclass
+class FusionConfig:
+    channel : int = 12
 
 @dataclass
 class DatasetConfig:
@@ -55,12 +57,13 @@ class DatasetConfig:
     end_month_val = 200210
     start_month_test = 200211
     end_month_test = 200212
-    aux_dim = 6
+    aux_dim : int = 6
     tec_dir = dataset_base_path/"tec_ionex_npy/igsg"  # tec图cdf文件夹路径
     indices_dir = dataset_base_path/"indices"
 
 @dataclass
 class TrainConfig:
+    model_name: str = model_name
     epochs_num: int = 10
     batch_size: int = 24
     input_day_num: int = 3
@@ -86,5 +89,4 @@ class EDCGConvLSTMConfig:
 class EPDConfig:
     transmit_parameter : int = 3  # 卷积编码层的通道数大小
     out_dim : int = 128  # 卷积编码层最终线性层的输出维度
-    model_name: str = model_name
     EPDmodel_name: str = EPDmodel_name

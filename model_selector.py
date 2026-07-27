@@ -1,9 +1,9 @@
-from config import ModelConfig,DatasetConfig,TrainConfig
-cfg_model = ModelConfig()
+import torch.nn as nn
+from config import EPDConfig,DatasetConfig,TrainConfig,model_name
+cfg_EPD_model = EPDConfig()
 cfg_dataset = DatasetConfig()
 cfg_train = TrainConfig()
-EPD_PredictMODEL = cfg_model.EPDmodel_name
-MODEL = cfg_model.model_name
+EPD_PredictMODEL = cfg_EPD_model.EPDmodel_name
 # 统一导入对应模型
 if EPD_PredictMODEL == "transformer":
     from E_P_D.PredictionModel.Transformer.transformerModule import TecPreTransformer as EPD_Predictor
@@ -16,12 +16,30 @@ elif EPD_PredictMODEL == "convgru":
 else:
     raise ValueError("模型不存在")
 
-if MODEL == "E_P_D":
+if model_name == "E_P_D":
     from E_P_D.model_E_P_D import ModelEPD as Model
-elif MODEL == "ED_CGConvLSTM":
-    from ED_CGConvLSTM.ED_CGConvLSTM import ED_CGConvLSTM as Model
+elif model_name == "ED_CGConvLSTM":
+    from ED_CGConvLSTM.ED_CGConvLSTM import EDCGConvLSTM as Model
 else:
     raise ValueError("模型不存在")
 
+class ModelAll(nn.Module):
+    def __init__(self,model_name = model_name):
+        super().__init__()
+        self.model = Model()
+        self.model_name = model_name
+        self._reset_parameters()
+    def _reset_parameters(self):
+        for p in self.parameters():  # 遍历模型内所有参数
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+    def forward(self,x):
+        if self.model_name == "E_P_D":
+            x = self.model(x)
+        if self.model_name == "ED_CGConvLSTM":
+            x = x.unsqueeze(2)
+            x = self.model(x)
+        return x
+
 # 对外统一暴露类名：
-__all__ = ["EPD_Predictor","Model"]
+__all__ = ["EPD_Predictor","ModelAll"]
