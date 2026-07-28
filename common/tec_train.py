@@ -110,7 +110,9 @@ class TrainModel:
                 for batch_in_tec,batch_in_aux,batch_exp_tec,batch_exp_aux in self.test_loader:
 
                     batch_in_tec = batch_in_tec.float().to(self.device)  # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
+                    # 数据输出格式固定为(Batch, input_length, H, W)
                     batch_in_aux = batch_in_aux.float().to(self.device)
+                    #数据输出格式固定为(Batch, input_length, aux,dim)
                     batch_exp_tec = batch_exp_tec.float().to(self.device)
                     outputs = self.model(batch_in_tec,batch_in_aux)
                     test_loss += self.criterion(outputs, batch_exp_tec).item()

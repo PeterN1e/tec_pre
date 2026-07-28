@@ -65,7 +65,7 @@ class DatasetConfig:
 class TrainConfig:
     model_name: str = model_name
     epochs_num: int = 10
-    batch_size: int = 24
+    batch_size: int = 4
     input_day_num: int = 3
     output_day_num: int = 1
     input_length: int = input_day_num*12

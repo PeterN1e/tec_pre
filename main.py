@@ -135,7 +135,7 @@ def model_predict_only():
         aux_scaler = aux_scaler
     )
     test_dataloader = DataLoader(test_dataset, batch_size=cfg_train.batch_size, shuffle=False, drop_last=True)
-    model =Model()
+    model =ModelAll()
     save_dir = cfg_train.model_name
     model.load_state_dict(torch.load(os.path.join(r"save/model_dict",save_dir, "model_state_dict.pth"), map_location=cfg_train.device,weights_only=True))
 

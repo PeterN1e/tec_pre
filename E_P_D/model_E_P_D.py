@@ -27,13 +27,13 @@ class ModelEPD(nn.Module):
                                          predict_len = output_length)
         self.decoder = CnnDecoder(transmit_parameter_de = transmit_parameter)
         self.Fusion = FilmFusion(aux_dim = aux_dim)
-    def forward(self,tec24,aux):
+    def forward(self,tec,aux):
         """
-        :param tec24: (batch_size,seq_length,71,73)
+        :param tec: (batch_size,seq_length,71,73)
         :param aux: (batch_size,seq_length,4)
         :return:
         """
-        x = self.encoder(tec24)
+        x = self.encoder(tec)
         x = self.Fusion(feat_map = x,aux = aux)
         x = self.predictor(x)
         x = self.decoder(x)

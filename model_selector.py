@@ -33,12 +33,15 @@ class ModelAll(nn.Module):
         for p in self.parameters():  # 遍历模型内所有参数
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-    def forward(self,x):
+    def forward(self,tec,aux):
         if self.model_name == "E_P_D":
+            x = self.model(tec,aux)
+        elif self.model_name == "ED_CGConvLSTM":
+            x = tec.unsqueeze(2)
             x = self.model(x)
-        if self.model_name == "ED_CGConvLSTM":
-            x = x.unsqueeze(2)
-            x = self.model(x)
+            x = x.squeeze(2)
+        else:
+            raise ValueError("model_selector.py,模型选择错误")
         return x
 
 # 对外统一暴露类名：
