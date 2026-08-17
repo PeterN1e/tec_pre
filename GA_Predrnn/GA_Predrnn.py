@@ -1,193 +1,106 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils import spectral_norm
-import math
+from torch.utils.data import Dataset, DataLoader
+import numpy as np
 
 class STLSTMCell(nn.Module):
-    def __init__(self,input_channels,hidden_channels,kernel_size = 3):
+    def __init__(self, in_channels, hidden_channels, kernel_size=3):
         super().__init__()
-        self.input_channels = input_channels
         self.hidden_channels = hidden_channels
-        padding = kernel_size//2
+        padding = kernel_size // 2
 
-        #输入到状态的卷积
-        self.conv_x = nn.Conv2d(input_channels,
-                                hidden_channels * 4,
-                                kernel_size,
-                                padding = padding,
-                                bias = True)
-        #状态到状态的卷积
-        self.conv_h = nn.Conv2d(hidden_channels ,
-                                hidden_channels * 4,
-                                kernel_size,
-                                padding = padding,
-                                bias = True)
-        #时空记忆M的卷积
-        self.conv_m = nn.Conv2d(hidden_channels * 2,
-                                hidden_channels * 4,
-                                kernel_size,
-                                padding = padding,
-                                bias = True)
-        #输出门的额外卷积, 用于结合时空记忆M来生成最终隐藏状态
-        self.conv_o = nn.Conv2d(hidden_channels * 2,
-                                hidden_channels,
-                                kernel_size,
-                                padding = padding,
-                                bias = True)
-        self.norm = nn.LayerNorm([hidden_channels])
+        # 时间记忆C的门控卷积
+        self.conv_x = nn.Conv2d(in_channels, hidden_channels * 4, kernel_size, padding=padding)
+        self.conv_h = nn.Conv2d(hidden_channels, hidden_channels * 4, kernel_size, padding=padding)
+        self.conv_m = nn.Conv2d(hidden_channels, hidden_channels * 4, kernel_size, padding=padding)
 
-    def forward(self,x_t,h_prev,c_prev,m_prev):
-        gates_x = self.conv_x(x_t)  # [B, 4*C, H, W]
-        gates_h = self.conv_h(h_prev)# [B, 4*C, H, W]
-        gates_m = self.conv_m(m_prev)# [B, 4*C, H, W]
+        # 空间记忆M的门控卷积（垂直层间传递）
+        self.conv_xm = nn.Conv2d(in_channels, hidden_channels * 2, kernel_size, padding=padding)
+        self.conv_cm = nn.Conv2d(hidden_channels, hidden_channels * 2, kernel_size, padding=padding)
+        self.conv_mm = nn.Conv2d(hidden_channels, hidden_channels * 2, kernel_size, padding=padding)
 
-        gates = gates_x + gates_h + gates_m
+        # 输出门与特征融合
+        self.conv_o = nn.Conv2d(in_channels + hidden_channels * 2, hidden_channels, kernel_size, padding=padding)
+        self.conv_fuse = nn.Conv2d(hidden_channels * 2, hidden_channels, 1)
 
-        i,f,g,o = torch.chunk(gates,4,dim = 1)
-        i = torch.sigmoid(i)
-        f = torch.sigmoid(f)
-        o = torch.sigmoid(o)
-        g = torch.tanh(o)
-
-        c_t = f * c_prev + i * g
-        m_t = f *m_prev +i * g
-        h_t = o * torch.tanh(self.conv_o(torch.cat([c_t,m_t],dim = 1)))
-        return h_t,c_t,m_t
-
-class Predrnn(nn.Module):
-    def __init__(self,input_channels,hidden_channels,input_length,output_length,num_layers):
-        super().__init__()
-        self.input_channels = input_channels
-        self.hidden_channels = hidden_channels
-        self.input_length = input_length
-        self.num_layers = num_layers
-        self.output_length = output_length
-
-        self.cells = nn.ModuleList()
-        for i in range(num_layers):
-            in_ch = self.input_channels if i == 0 else self.hidden_channels
-            self.cells.append(STLSTMCell(in_ch,hidden_channels))
-
-            self.output_conv = nn.Conv2d(hidden_channels,
-                                         self.output_length,
-                                         kernel_size = 1,
-                                         bias = True)
-    def forward(self,input_seq,return_hidden = False):
-
-        B,T,C,H,W = input_seq.shape
-        h_list = [torch.zeros(B,self.hidden_channels,H,W,device=input_seq.device)
-                  for _ in range(self.num_layers)]
+    def forward(self, x, prev_h, prev_c, prev_m):
         """
-        # 列表推导式
-        h_list = [torch.zeros(...) for _ in range(self.num_layers)]
-        # 完全等价于下面普通for循环
-        h_list = []
-        for _ in range(self.num_layers):
-            tensor = torch.zeros(B,self.hidden_channels,H,W,device=input_seq.device)
-            h_list.append(tensor)
+        Args:
+            x: 当前输入 (B, in_channels, H, W)
+            prev_h: 上一时刻隐藏态 (B, hidden_channels, H, W)
+            prev_c: 上一时刻时间记忆 (B, hidden_channels, H, W)
+            prev_m: 上一层当前时刻空间记忆 (B, hidden_channels, H, W)
+        Returns:
+            h, c, m: 当前时刻隐藏态、时间记忆、空间记忆
         """
-        c_list = [torch.zeros(B, self.hidden_channels, H, W, device=input_seq.device)
-                  for _ in range(self.num_layers)]
-        m_list = [torch.zeros(B, self.hidden_channels, H, W, device=input_seq.device)
-                  for _ in range(self.num_layers)]
-        prediction = []
-        all_hidden_states = []
-        #编码阶段+解码阶段
-        total_steps = self.input_length + self.output_length
+        # 时间记忆更新（水平时序传递）
+        gates = self.conv_x(x) + self.conv_h(prev_h) + self.conv_m(prev_m)
+        i, f, c_tilde, o = torch.split(gates, self.hidden_channels, dim=1)
+        i, f, o = torch.sigmoid(i), torch.sigmoid(f), torch.sigmoid(o)
+        c = f * prev_c + i * torch.tanh(c_tilde)
 
-        for t in range(total_steps):
-            if t < self.input_length:
-                # 处于编码阶段
-                x_t = input_seq[:,t,:,:]  #[B,C,H,W]
-            else:
-                # 处于解码阶段
-                x_t = pred
-            current_input = x_t
-            for layer_idx in range(self.num_layers):
-                # " \ " 行连接符（续行符）
-                h_list[layer_idx], c_list[layer_idx],m_list[layer_idx] = \
-                    self.cells[layer_idx](current_input,h_list[layer_idx],m_list[layer_idx])
+        # 空间记忆更新（垂直层间传递，从下往上）
+        gates_m = self.conv_xm(x) + self.conv_cm(c) + self.conv_mm(prev_m)
+        i_m, f_m = torch.split(gates_m, self.hidden_channels, dim=1)
+        i_m, f_m = torch.sigmoid(i_m), torch.sigmoid(f_m)
+        m_tilde = torch.tanh(self.conv_xm(x) + self.conv_cm(c))
+        m = f_m * prev_m + i_m * m_tilde
 
-                current_input = h_list[layer_idx]
-            last_hidden = h_list[-1]
-
-            # 收集解码阶段的隐藏状态 (用于注意力模块)
-            if return_hidden:
-                all_hidden_states.append(last_hidden)
-
-            #只在解码阶段生成预测
-            if t >= self.input_length:
-                pred = self.output_conv(last_hidden)
-                prediction.append(pred)
-        #堆叠预测结果
-        predictions = torch.cat(prediction,dim = 1)
-
-        if return_hidden:
-            all_hidden_states = torch.cat(all_hidden_states,dim = 1)
-            return predictions,all_hidden_states
-        return predictions
+        # 输出隐藏态
+        o = torch.sigmoid(self.conv_o(torch.cat([x, c, m], dim=1)))
+        h = o * torch.tanh(self.conv_fuse(torch.cat([c, m], dim=1)))
+        return h, c, m
 class HaloAttention(nn.Module):
-    def __init__(self,dim,block_size = 8,halo_size = 3,
-                 num_heads= 4,dim_head = 32):
+    def __init__(self, dim, block_size=8, halo_size=2, num_heads=4):
         super().__init__()
-        self.num_heads = num_heads
-        self.dim_head = dim_head
-        self.halo_size = halo_size
+        self.dim = dim
         self.block_size = block_size
-        inner_dim = dim_head * num_heads
-        self.scale = dim_head ** -0.5
-        #QKV投影
-        self.to_q = nn.Linear(dim,inner_dim,bias = False)
-        self.to_kv = nn.Linear(dim,inner_dim*2,bias = False)
-        self.to_out = nn.Linear(inner_dim,dim,bias = False)
+        self.halo_size = halo_size
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim ** -0.5
 
-        #位置编码 (相对位置偏置)
-        self.rel_bias = nn.Parameter(torch.zeros(num_heads,
-                                                 (block_size * 2 * halo_size)**2,
-                                                 (block_size * 2 * halo_size)**2)
-                                     )
-        def forward(self,x):
-            B,C,H,W = x.shape
-            bs = self.block_size
-            hs = self.halo_size
-            padded_bs = bs * 2 * hs  #扩展后的块大小
+        self.qkv_conv = nn.Conv2d(dim, dim * 3, kernel_size=1)
+        self.out_conv = nn.Conv2d(dim, dim, kernel_size=1)
 
-            #1 Padding（确保，H，W可被block_size整除）
-            pad_h = (bs - H % bs) % bs
-            pad_w = (bs - W % bs) % bs
-            x_padded = F.pad(x,(0,pad_w,0,pad_h))
-            _,_,H_p,W_p = x_padded.shape
-            #2: Halo Padding (光晕填充) ----
-            x_halo = F.pad(x_padded,(hs,hs,hs,hs))
-            #3: 提取所有扩展后的块
-            num_blocks_h = H_p // bs
-            num_blocks_w = W_p // bs
-            # 使用unfold操作提取所有块
-            # 每个块的大小为 padded_bs × padded_bs
-            blocks = []
-            for i in range(num_blocks_h):
-                for j in range(num_blocks_w):
-                    # 计算在padded特征图中的起止坐标
-                    h_start = i * bs
-                    w_start = j * bs
-                    #在halo-padded特征图中, 坐标偏移了hs
-                    block = x_halo[:,:,
-                                    h_start:h_start+padded_bs,
-                                    w_start:w_start+padded_bs]
-                    blocks.append(block)
-            # [B, num_blocks, C, padded_bs, padded_bs]
-            blocks = torch.stack(blocks,dim = 1)
-            num_blocks = num_blocks_h * num_blocks_w
+    def forward(self, x):
+        B, C, H, W = x.shape
+        bs, hs = self.block_size, self.halo_size
 
-            #4 计算局部自注意力 ----
-            # Reshape: [B * num_blocks, C, padded_bs^2]
-            blocks_flat = blocks.reshape(B * num_blocks, C,-1).permute(0,2,1)
-            # blocks_flat: [B*num_blocks, num_tokens, C]
-            # QKV投影
-            q = self.to_q(blocks_flat) # [B*N, T, inner_dim]
-            kv = self.to_kv(blocks_flat)
-            k,v = kv.chunk(2, dim = -1)
-            #多头注意力
-            T = blocks_flat.shape[1]
-            q = q.reshape(B * num
+        # 填充：保证能被block整除，同时四周加halo边缘
+        pad_h = (bs - H % bs) % bs
+        pad_w = (bs - W % bs) % bs
+        x_pad = F.pad(x, (hs, hs + pad_w, hs, hs + pad_h))
+        H_pad, W_pad = x_pad.shape[2], x_pad.shape[3]
+
+        # 生成QKV并拆分为多头
+        qkv = self.qkv_conv(x_pad)
+        q, k, v = torch.split(qkv, self.dim, dim=1)
+        q = q.view(B, self.num_heads, self.head_dim, H_pad, W_pad)
+        k = k.view(B, self.num_heads, self.head_dim, H_pad, W_pad)
+        v = v.view(B, self.num_heads, self.head_dim, H_pad, W_pad)
+
+        # Query只取中间有效块（去掉halo区域）
+        q_valid = q[:, :, :, hs:-hs, hs:-hs]
+        q_blocks = F.unfold(q_valid, kernel_size=bs, stride=bs)
+        num_blocks = q_blocks.shape[-1]
+        q_blocks = q_blocks.view(B, self.num_heads, self.head_dim, bs*bs, num_blocks)
+
+        # Key/Value取带halo的完整块
+        kv_block_size = bs + 2 * hs
+        k_blocks = F.unfold(k, kernel_size=kv_block_size, stride=bs)
+        v_blocks = F.unfold(v, kernel_size=kv_block_size, stride=bs)
+        k_blocks = k_blocks.view(B, self.num_heads, self.head_dim, kv_block_size**2, num_blocks)
+        v_blocks = v_blocks.view(B, self.num_heads, self.head_dim, kv_block_size**2, num_blocks)
+
+        # 局部自注意力计算
+        attn = torch.einsum('bhdqn,bhdkn->bhqkn', q_blocks, k_blocks) * self.scale
+        attn = F.softmax(attn, dim=-2)
+        out = torch.einsum('bhqkn,bhdkn->bhdqn', attn, v_blocks)
+        out = out.contiguous().view(B, self.dim, bs*bs, num_blocks)
+
+        # 折叠回原图并裁剪回原始尺寸
+        out = F.fold(out, output_size=(H_pad - 2*hs, W_pad - 2*hs), kernel_size=bs, stride=bs)
+        out = out[:, :, :H, :W]
+        return self.out_conv(out)

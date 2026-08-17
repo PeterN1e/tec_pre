@@ -16,6 +16,7 @@ from common.Data_Preprocessing import inverse_transform_predictions
 
 import os
 import matplotlib.pyplot as plt
+from common.EvaluationMetrics import evaluate_all
 
 cfg_dataset = DatasetConfig()
 cfg_train = TrainConfig()
@@ -136,6 +137,7 @@ def model_predict_only():
     )
     test_dataloader = DataLoader(test_dataset, batch_size=cfg_train.batch_size, shuffle=False, drop_last=True)
     model =ModelAll()
+    model = model.to(cfg_train.device)
     save_dir = cfg_train.model_name
     model.load_state_dict(torch.load(os.path.join(r"save/model_dict",save_dir, "model_state_dict.pth"), map_location=cfg_train.device,weights_only=True))
 
@@ -146,14 +148,17 @@ def model_predict_only():
     act = inverse_transform_predictions(act,tec_scaler)
     aux = inverse_transform_predictions(aux,aux_scaler)
     delta = act - pre
-    delta_abs = np.abs(delta)   #计算绝对值
-    delta_average_one_hour = np.mean(delta_abs,axis =(3, 4) )#对单张差值取平均值
-    delta_average_one_day = np.mean(delta_average_one_hour,axis =2)
-    delta_shape = delta_average_one_day.shape
-    datagram(delta_average_one_day.reshape(delta_shape[0]*delta_shape[1]))
-
-    print(pre.shape,act.shape)
+    print(pre.shape, act.shape)
     print("预测完成")
+    # delta_abs = np.abs(delta)   #计算绝对值
+    # delta_average_one_hour = np.mean(delta_abs,axis =(3, 4) )#对单张差值取平均值
+    # delta_average_one_day = np.mean(delta_average_one_hour,axis =2)
+    # delta_shape = delta_average_one_day.shape
+    # datagram(delta_average_one_day.reshape(delta_shape[0]*delta_shape[1]))
+    metrics = evaluate_all(pre, act)
+    for k, v in metrics.items():
+        print(f"  {k:>6s} : {v:.6f}")
+
     for i in range(10): #允许检索10次
         retrival = int(input(f"输入检索值0~{pre.shape[0]*pre.shape[1]}："))#输入的字符转换为数字
         if 0<=retrival<pre.shape[0]:
@@ -163,21 +168,15 @@ def model_predict_only():
             print("输入错误")
             break
 if __name__ == "__main__":
-    a = input("训练模式输入0，推理模式输入1：")
+    a = input("训练后推理模式输入0，单推理模式输入1：")
     if a=="0":
         print("开始进行训练")
         main()
-        b = input("是否要接着推理？输入1则进行")
-        if b=="1":
-            model_predict_only()
-        else:
-            print("不进行推理，训练结束。")
-            exit()
+        model_predict_only()
+        exit()
     elif a=="1":
         print("开始进行推理")
         model_predict_only()
-        c = input("开始数据分析输入：0")
-        if c=="0":
-            exit()
+
     else:
         print("输入错误")

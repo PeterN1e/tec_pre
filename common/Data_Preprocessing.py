@@ -41,7 +41,7 @@ def inverse_transform_predictions(data,scaler):
     #actual[24,71,73]构成的列表
     data_inv = []
     #act_inv = []#创建的是列表
-    dim = data.ndim
+    dim = len(data.shape)
     if dim == 5:#说明传入的数据是 标准化后的tec图
         original_shape = data.shape
         data_2d = data.reshape(-1,5183)#将数据转化为一行  5183 = 71*73

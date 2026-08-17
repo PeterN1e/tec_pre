@@ -82,7 +82,7 @@ class EDCGConvLSTMConfig:
     output_dim: int = 1
     num_layers: int = 4
     kernel_size: int = 3
-    hidden_dim: int = 60
+    hidden_dim: int = 24
     H : int =  71
     W : int = 73
 @dataclass
