@@ -16,7 +16,7 @@ from common.Data_Preprocessing import inverse_transform_predictions
 
 import os
 import matplotlib.pyplot as plt
-from common.EvaluationMetrics import evaluate_all
+from common.EvaluationMetrics import print_evaluation
 
 cfg_dataset = DatasetConfig()
 cfg_train = TrainConfig()
@@ -32,7 +32,7 @@ def main():
     np.random.seed(42)
     warnings.filterwarnings('ignore')
 
-    tec_scaler = MinMaxScaler()  # 不同数据缩放器不允许共同使用
+    tec_scaler = MinMaxScaler()
     aux_scaler = MinMaxScaler()
 
     train_dataset = TecIonosphereDataset(
@@ -56,7 +56,7 @@ def main():
     )
 
     train_dataloader = DataLoader(train_dataset,batch_size=cfg_train.batch_size, shuffle=True,drop_last = True)
-    val_dataloader = DataLoader(val_dataset,batch_size=cfg_train.batch_size, shuffle=False,drop_last = True)
+    val_dataloader = DataLoader(val_dataset,batch_size=cfg_train.batch_size, shuffle=False, drop_last = True)
 
     print("训练数据集总步长：", train_dataset.__len__())
     print("测试数据集总步长：", val_dataset.__len__())
@@ -67,7 +67,7 @@ def main():
     criterion_mse = nn.MSELoss()
     criterion_mae = nn.L1Loss()
     criterion_l1smooth = nn.SmoothL1Loss()
-    optimizer=optim.Adam(model.parameters(),lr = cfg_train.lr)   #优化器对象
+    optimizer=optim.Adam(model.parameters(),lr = cfg_train.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode='min',
@@ -78,7 +78,7 @@ def main():
     print(f"模型参数量:{sum(p.numel() for p in model.parameters() ):}")
     print("开始训练模型...")
 
-    if not os.path.exists(os.path.join(cfg_train.model_path,cfg_train.model_name)): #模型存放位置
+    if not os.path.exists(os.path.join(cfg_train.model_path,cfg_train.model_name)):
         os.makedirs(os.path.join(cfg_train.model_path,cfg_train.model_name))
 
     tec_train = TrainModel(model = model,
@@ -102,7 +102,7 @@ def main():
     plt.plot(train_losses, label='training loss')
     plt.plot(test_losses, label='test loss')
     plt.title("model loss")
-    plt.xlabel('Epoch')  # 分别为x ，y轴添加标签
+    plt.xlabel('Epoch')
     plt.ylabel('loss')
     plt.legend()
     plt.grid(True, alpha=0.3)
@@ -148,25 +148,32 @@ def model_predict_only():
     act = inverse_transform_predictions(act,tec_scaler)
     aux = inverse_transform_predictions(aux,aux_scaler)
     delta = act - pre
-    print(pre.shape, act.shape)
+
+    # 将五维张量 (num_batches, batch_size, T, H, W) 合并为四维 (B, T, H, W)
+    # prediction6.py输出形状为 (num_batches, batch_size, 12, 71, 73)
+    # 需要reshape为 (num_batches*batch_size, 12, 71, 73) 才能用于评估
+    num_batches, batch_size, T, H, W = pre.shape
+    pre_4d = pre.reshape(num_batches * batch_size, T, H, W)
+    act_4d = act.reshape(num_batches * batch_size, T, H, W)
+
+    print(pre_4d.shape, act_4d.shape)
     print("预测完成")
-    # delta_abs = np.abs(delta)   #计算绝对值
-    # delta_average_one_hour = np.mean(delta_abs,axis =(3, 4) )#对单张差值取平均值
-    # delta_average_one_day = np.mean(delta_average_one_hour,axis =2)
-    # delta_shape = delta_average_one_day.shape
-    # datagram(delta_average_one_day.reshape(delta_shape[0]*delta_shape[1]))
-    metrics = evaluate_all(pre, act)
-    for k, v in metrics.items():
-        print(f"  {k:>6s} : {v:.6f}")
+
+    # 使用新的逐步评估函数，符合TEC预测论文标准
+    print_evaluation(pre_4d, act_4d)
+
+    # delta用于图片展示
+    delta_4d = delta.reshape(num_batches * batch_size, T, H, W)
 
     for i in range(10): #允许检索10次
-        retrival = int(input(f"输入检索值0~{pre.shape[0]*pre.shape[1]}："))#输入的字符转换为数字
-        if 0<=retrival<pre.shape[0]:
-            pic_show(act[retrival,0,:,:,:], pre[retrival,0,:,:,:], aux[retrival,0,:,:],delta[retrival,0,:,:,:])  # 引用“图片展示”实例
+        retrival = int(input(f"输入检索值0~{pre_4d.shape[0]}："))
+        if 0<=retrival<pre_4d.shape[0]:
+            pic_show(act_4d[retrival,0,:,:], pre_4d[retrival,0,:,:], aux.reshape(-1, aux.shape[-1])[retrival],delta_4d[retrival,0,:,:])
             print("完成绘制")
         else:
             print("输入错误")
             break
+
 if __name__ == "__main__":
     a = input("训练后推理模式输入0，单推理模式输入1：")
     if a=="0":

@@ -56,7 +56,7 @@ class DatasetConfig:
     start_month_val = 200209
     end_month_val = 200210
     start_month_test = 200211
-    end_month_test = 200212
+    end_month_test = 200211
     aux_dim : int = 6
     tec_dir = dataset_base_path/"tec_ionex_npy/igsg"  # tec图cdf文件夹路径
     indices_dir = dataset_base_path/"indices"
