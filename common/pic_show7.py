@@ -46,7 +46,7 @@ def pic_show(act, pre, aux, delta):
         # ---- 第1行：真实图 ----
         ax1 = fig.add_subplot(gs[0, i])
         im1 = ax1.pcolormesh(lon, lat, act[i, :, :],
-                             shading='auto', cmap='jet',
+                             shading='nearest', cmap='jet',
                              vmin=0, vmax=vmax_tec)
         # 右上角参数信息
         title_right = f"SSN:{aux[i, 2]:.0f} | DST:{aux[i, 3]:.0f} | F10.7:{aux[i, 4]:.1f}"
@@ -58,7 +58,7 @@ def pic_show(act, pre, aux, delta):
         # ---- 第2行：预测图 ----
         ax2 = fig.add_subplot(gs[1, i])
         im2 = ax2.pcolormesh(lon, lat, pre[i, :, :],
-                             shading='auto', cmap='jet',
+                             shading='nearest', cmap='jet',
                              vmin=0, vmax=vmax_tec)
         if i == 0:
             ax2.set_title(row_titles[1], loc='left', fontsize=8, fontweight='bold')
@@ -66,7 +66,7 @@ def pic_show(act, pre, aux, delta):
         # ---- 第3行：差值图 ----
         ax3 = fig.add_subplot(gs[2, i])
         im3 = ax3.pcolormesh(lon, lat, delta[i, :, :],
-                             shading='auto', cmap='jet',
+                             shading='nearest', cmap='jet',
                              vmin=-float(vmax_error), vmax=float(vmax_error))
         # 子图中间显示平均绝对误差
         average = np.mean(np.abs(delta[i, :, :]))

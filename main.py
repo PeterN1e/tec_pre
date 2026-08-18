@@ -155,7 +155,7 @@ def model_predict_only():
     num_batches, batch_size, T, H, W = pre.shape
     pre_4d = pre.reshape(num_batches * batch_size, T, H, W)
     act_4d = act.reshape(num_batches * batch_size, T, H, W)
-
+    aux_3d = aux.reshape(num_batches * batch_size, T, aux.shape[-1])
     print(pre_4d.shape, act_4d.shape)
     print("预测完成")
 
@@ -163,12 +163,12 @@ def model_predict_only():
     print_evaluation(pre_4d, act_4d)
 
     # delta用于图片展示
-    delta_4d = delta.reshape(num_batches * batch_size, T, H, W)
+    delta_4d = act_4d - pre_4d
 
     for i in range(10): #允许检索10次
         retrival = int(input(f"输入检索值0~{pre_4d.shape[0]}："))
         if 0<=retrival<pre_4d.shape[0]:
-            pic_show(act_4d[retrival,0,:,:], pre_4d[retrival,0,:,:], aux.reshape(-1, aux.shape[-1])[retrival],delta_4d[retrival,0,:,:])
+            pic_show(act_4d[retrival,:,:,:], pre_4d[retrival,:,:,:], aux_3d[retrival,:,:],delta_4d[retrival,:,:,:])
             print("完成绘制")
         else:
             print("输入错误")
