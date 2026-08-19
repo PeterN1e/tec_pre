@@ -30,6 +30,8 @@ if model_select == 1:
     model_name = "E_P_D"
 elif model_select == 2:
     model_name = "ED_CGConvLSTM"
+elif model_select == 3:
+    model_name = "GA_Predrnn"
 else:
     raise ValueError("模型不存在")
 
@@ -90,3 +92,27 @@ class EPDConfig:
     transmit_parameter : int = 3  # 卷积编码层的通道数大小
     out_dim : int = 128  # 卷积编码层最终线性层的输出维度
     EPDmodel_name: str = EPDmodel_name
+@dataclass
+class GAPredrnnConfig:
+    input_dim: int = 4            # TEC + dst + ap + f10.7
+    hidden_dim: int = 64
+    num_layers: int = 3           # stacked ST-LSTM layers
+    kernel_size: int = 5
+    input_length: int = 24        # 2 days x 12 steps
+    output_length: int = 12       # 1 day  x 12 steps
+    aux_output_dim: int = 3       # dst, ap, f10.7
+    # Halo attention
+    block_size: int = 8
+    halo_size: int = 2
+    num_heads: int = 4
+    # Discriminator
+    disc_base_ch: int = 64
+    # Loss weights (a >> b per paper)
+    lambda_tec: float = 1.0
+    lambda_aux: float = 0.1
+    # Training
+    d_lr: float = 1e-4
+    g_lr: float = 1e-3
+    epochs: int = 50
+    patience: int = 10
+    clip_grad: float = 1.0

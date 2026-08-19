@@ -16,7 +16,9 @@ elif EPD_PredictMODEL == "convgru":
 else:
     raise ValueError("模型不存在")
 
-if model_name == "E_P_D":
+if model_name == "GA_Predrnn":
+    from GA_Predrnn.GA_Predrnn import GAPredrnnPredictor as Model
+elif model_name == "E_P_D":
     from E_P_D.model_E_P_D import ModelEPD as Model
 elif model_name == "ED_CGConvLSTM":
     from ED_CGConvLSTM.ED_CGConvLSTM import EDCGConvLSTM as Model
@@ -34,7 +36,10 @@ class ModelAll(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
     def forward(self,tec,aux):
-        if self.model_name == "E_P_D":
+        if self.model_name == "GA_Predrnn":
+            tec_out = self.model(tec, aux)   # (B, 12, 71, 73)
+            return tec_out
+        elif self.model_name == "E_P_D":
             x = self.model(tec,aux)
         elif self.model_name == "ED_CGConvLSTM":
             x = tec.unsqueeze(2)
