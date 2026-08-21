@@ -25,13 +25,15 @@ if platform.system() == "Windows":
 else:
     dataset_base_path = Path("/mnt/d/Dataset_tec_NLY")  # 或你的 Linux 挂载路径
 
-model_select = 2
+model_select = 4
 if model_select == 1:
     model_name = "E_P_D"
 elif model_select == 2:
     model_name = "ED_CGConvLSTM"
 elif model_select == 3:
     model_name = "GA_Predrnn"
+elif model_select == 4:
+    model_name = "ED_Autoformer"
 else:
     raise ValueError("模型不存在")
 
@@ -116,3 +118,17 @@ class GAPredrnnConfig:
     epochs: int = 50
     patience: int = 10
     clip_grad: float = 1.0
+
+@dataclass
+class EDAutoformerConfig:
+    d_model: int = 512            # Autoformer 隐藏维度
+    n_heads: int = 8              # 自相关多头数
+    d_ff: int = 2048              # FFN 中间维度
+    e_layers: int = 2             # 编码器层数
+    d_layers: int = 1             # 解码器层数
+    moving_avg: int = 13          # 系列分解滑动平均核大小
+    factor: int = 3               # top-k 时延 = factor * ln(L)
+    dropout: float = 0.05
+    activation: str = "gelu"
+    encode_channels: tuple = (64, 128, 256, 512)  # TEC 编码器通道数
+    label_len: int = None         # 解码器已知标签长度, None 时取 input_length // 2
