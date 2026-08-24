@@ -1,24 +1,41 @@
 import torch
-from config import TrainConfig,DatasetConfig
+from config import TrainConfig, DatasetConfig
 cfg_train = TrainConfig
 cfg_dataset = DatasetConfig
 
-import os  #处理文件和目录
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-import logging  #跟踪程序的运行状态、调试错误以及记录重要信息
-# 导入进度条模块，tqdm可以让我们在训练过程中看到每个epoch的进度
+import os
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+import logging
+import time
+import subprocess
 from tqdm import tqdm
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
-logging.basicConfig(
-    level=logging.INFO,#只有 INFO 级别及以上（INFO、WARNING、ERROR、CRITICAL）的日志会被处理；DEBUG 会被忽略。
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',#依次是时间、logger 名、级别、正文。
-    handlers=[                                  # 同时把日志送到两个地方
-        logging.FileHandler(cfg_train.log_path),  #所保存的日志
-        logging.StreamHandler()               #控制台输出，可以实时查看进度
-    ]
-)
-logger = logging.getLogger(__name__)
+SEP = "=" * 80
+
+
+def _get_gpu_info():
+    """Return (mem_used_mb, mem_total_mb, gpu_util_pct) or (0, 0, "N/A") on failure."""
+    if not torch.cuda.is_available():
+        return 0, 0, "N/A"
+    try:
+        mem_alloc = torch.cuda.memory_allocated() / (1024 * 1024)
+        mem_reserved = torch.cuda.memory_reserved() / (1024 * 1024)
+        mem_total = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
+        util = "N/A"
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                util = result.stdout.strip() + "%"
+        except Exception:
+            pass
+        return int(mem_reserved), int(mem_total), util
+    except Exception:
+        return 0, 0, "N/A"
+
 
 class TrainModel:
     def __init__(self,
@@ -26,71 +43,84 @@ class TrainModel:
                  train_loader,
                  test_loader,
                  criterion,
+                 criterion_name,
                  optimizer,
                  model_save_path,
-                 scheduler = None,
-                 save_best = True,
-                 patience = 5,
+                 scheduler=None,
+                 save_best=True,
+                 patience=5,
                  ):
         super().__init__()
-        """
-        Args:
-        model: PyTorch 模型
-        optimizer: 优化器
-        criterion: 损失函数
-        train_loader: 训练 DataLoader
-        test_loader: 测试 DataLoader
-        device: 计算设备
-        scheduler: 学习率调度器（可选），由外部创建并传入
-        patience: 早停的耐心值（连续多少个 epoch 验证损失不下降则停止）
-        save_best: 是否保存验证损失最低的模型
-        model_save_path: 最佳模型保存路径
-        """
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.criterion = criterion
+        self.criterion_name = criterion_name
         self.optimizer = optimizer
         self.batch_size = cfg_train.batch_size
         self.model_name = cfg_train.model_name
+        self.epochs_num = cfg_train.epochs_num
+        self.patience = patience
         self.input_length = cfg_train.input_length
         self.output_length = cfg_train.output_length
         self.start_month_train = cfg_dataset.start_month_train
         self.end_month_train = cfg_dataset.end_month_train
+        self.start_month_val = cfg_dataset.start_month_val
+        self.end_month_val = cfg_dataset.end_month_val
         self.device = cfg_train.device
         self.scheduler = scheduler
         self.save_best = save_best
-        self.patience = patience
         self.model_save_path = model_save_path
-        self.best_test_loss = float('inf')
+        self.best_test_loss = float("inf")
         self.counter = 0
         self.early_stop = False
 
-    def train(self,num_epochs):
-        train_losses = []
-        test_losses=[]
-        logger.info(f'------batch_size {self.batch_size:3d}| '
-                    f'model: {self.model_name}| '
-                    f'seq_length:{self.input_length:3d}  pred_length:{self.output_length:3d}'
-                    f'所用数据集:{self.start_month_train:3d}-{self.end_month_train:3d}'
-                    )
+        # ---- per-model logger ----
+        log_file = cfg_train.log_path / f"{self.model_name}.log"
+        self.logger = logging.getLogger(f"train.{self.model_name}")
+        self.logger.setLevel(logging.INFO)
+        self.logger.handlers.clear()
+        fh = logging.FileHandler(str(log_file), encoding="utf-8")
+        fh.setLevel(logging.INFO)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        fmt = logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        fh.setFormatter(fmt)
+        ch.setFormatter(fmt)
+        self.logger.addHandler(fh)
+        self.logger.addHandler(ch)
 
-        for epoch in range(1,num_epochs+1):
-            self.model.train()#模型测试模式
-            train_loss ,num= 0.0,0
+    def train(self, num_epochs):
+        train_losses = []
+        test_losses = []
+
+        param_count = sum(p.numel() for p in self.model.parameters())
+
+        self.logger.info(SEP)
+        self.logger.info(f"Model: {self.model_name}")
+        self.logger.info(f"Hyperparameters: batch_size={self.batch_size}, epochs_num={num_epochs}, patience={self.patience}, lr={cfg_train.lr}")
+        self.logger.info(f"Dataset: Train: {self.start_month_train}-{self.end_month_train}, Val: {self.start_month_val}-{self.end_month_val}")
+        self.logger.info(f"Parameters: {param_count:,}")
+        self.logger.info(f"Loss Function: {self.criterion_name}")
+        self.logger.info(SEP)
+
+        start_time = time.time()
+
+        for epoch in range(1, num_epochs + 1):
+            self.model.train()
+            train_loss = 0.0
             pbar = tqdm(self.train_loader,
                         total=len(self.train_loader),
                         ncols=100,
-                        desc=f'Epoch {epoch}/{num_epochs}',
+                        desc=f"Epoch {epoch}/{num_epochs}",
                         leave=False)
-            for batch_in_tec,batch_in_aux,batch_exp_tec,batch_exp_aux in pbar:
-
-                batch_in_tec = batch_in_tec.float().to(self.device)#转换前的数据类型为float64，为了和之后权重（float32）偏置计算
+            for batch_in_tec, batch_in_aux, batch_exp_tec, batch_exp_aux in pbar:
+                batch_in_tec = batch_in_tec.float().to(self.device)
                 batch_in_aux = batch_in_aux.float().to(self.device)
                 batch_exp_tec = batch_exp_tec.float().to(self.device)
                 batch_exp_aux = batch_exp_aux.float().to(self.device)
 
-                output = self.model(batch_in_tec,batch_in_aux)
+                output = self.model(batch_in_tec, batch_in_aux)
 
                 loss = self.criterion(output, batch_exp_tec)
                 self.optimizer.zero_grad()
@@ -100,48 +130,64 @@ class TrainModel:
 
                 train_loss += loss.item()
                 avg_loss = train_loss / (pbar.n + 1)
-                pbar.set_postfix({'batch_loss':f'{loss.item():.4f}',
-                                  'avg':f'{avg_loss:.4f}'})
+                pbar.set_postfix({"batch_loss": f"{loss.item():.4f}",
+                                  "avg": f"{avg_loss:.4f}"})
 
-            ###############验证阶段##############
-            self.model.eval()  # 模型切换为评估模式
+            # ---- validation ----
+            self.model.eval()
             test_loss = 0.0
             with torch.no_grad():
-                for batch_in_tec,batch_in_aux,batch_exp_tec,batch_exp_aux in self.test_loader:
-
-                    batch_in_tec = batch_in_tec.float().to(self.device)  # 转换前的数据类型为float64，为了和之后权重（float32）偏置计算
-                    # 数据输出格式固定为(Batch, input_length, H, W)
+                for batch_in_tec, batch_in_aux, batch_exp_tec, batch_exp_aux in self.test_loader:
+                    batch_in_tec = batch_in_tec.float().to(self.device)
                     batch_in_aux = batch_in_aux.float().to(self.device)
-                    #数据输出格式固定为(Batch, input_length, aux,dim)
                     batch_exp_tec = batch_exp_tec.float().to(self.device)
-                    outputs = self.model(batch_in_tec,batch_in_aux)
+                    outputs = self.model(batch_in_tec, batch_in_aux)
                     test_loss += self.criterion(outputs, batch_exp_tec).item()
+
             avg_train_loss = train_loss / len(self.train_loader)
             avg_test_loss = test_loss / len(self.test_loader)
 
             train_losses.append(avg_train_loss)
             test_losses.append(avg_test_loss)
-            logger.info(f'Epoch {epoch:3d} | '
-                        f'Train {avg_train_loss:.5f} | '
-                        f'Test  {avg_test_loss:.5f}')
-            pbar.close()
 
+            # ---- scheduler ----
             if self.scheduler is not None:
                 if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                     self.scheduler.step(avg_test_loss)
                 else:
-                    self.scheduler.step()  # 其他调度器（StepLR, CosineAnnealingLR 等）
+                    self.scheduler.step()
+
+            current_lr = self.optimizer.param_groups[0]["lr"]
+            gpu_mem_used, gpu_mem_total, gpu_util = _get_gpu_info()
+
+            self.logger.info(
+                f"Epoch {epoch:3d} | "
+                f"Train {avg_train_loss:.5f} | "
+                f"Val   {avg_test_loss:.5f} | "
+                f"LR {current_lr:.2e} | "
+                f"GPU Mem {gpu_mem_used}/{gpu_mem_total} MB | "
+                f"GPU Util {gpu_util}"
+            )
+            pbar.close()
 
             if avg_test_loss < self.best_test_loss:
                 self.best_test_loss = avg_test_loss
                 self.counter = 0
                 if self.save_best:
                     torch.save(self.model.state_dict(), self.model_save_path)
-                    logger.info(f'Best model saved at epoch {epoch} with test loss {avg_test_loss:.5f}')
+                    self.logger.info(f"Best model saved at epoch {epoch} with val loss {avg_test_loss:.5f}")
             else:
                 self.counter += 1
                 if self.counter >= self.patience:
-                    logger.info(f'Early stopping triggered at epoch {epoch}')
+                    self.logger.info(f"Early stopping triggered at epoch {epoch}")
                     self.early_stop = True
-                    break  # 终止训练
+                    break
+
+        elapsed = time.time() - start_time
+        h, rem = divmod(int(elapsed), 3600)
+        m, s = divmod(rem, 60)
+        self.logger.info(f"Best val loss: {self.best_test_loss:.5f}")
+        self.logger.info(f"Total time: {h}h {m}m {s}s")
+        self.logger.info(SEP)
+
         return train_losses, test_losses

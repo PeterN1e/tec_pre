@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # 在当前 .py 文件的同级目录下创建 log 文件夹
 log_dir = BASE_DIR / "save" / "log"
 log_dir.mkdir(parents=True, exist_ok=True)
-log_path = log_dir / "training.log"
+log_path = log_dir
 
 pic_dir = BASE_DIR / "save"/"pic"
 pic_dir.mkdir(parents=True, exist_ok=True)
@@ -69,6 +69,7 @@ class DatasetConfig:
 class TrainConfig:
     model_name: str = model_name
     epochs_num: int = 10
+    patience: int = 5
     batch_size: int = 4
     input_day_num: int = 3
     output_day_num: int = 1

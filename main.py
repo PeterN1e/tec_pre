@@ -85,9 +85,11 @@ def main():
                            train_loader = train_dataloader,
                            test_loader = val_dataloader,
                            criterion = criterion_mae,
+                           criterion_name = "L1Loss",
                            optimizer =optimizer,
                            scheduler =scheduler,
                            save_best = True,
+                           patience = cfg_train.patience,
                            model_save_path = os.path.join(cfg_train.model_path,cfg_train.model_name, "model_state_dict.pth"))
     train_losses, test_losses = tec_train.train(cfg_train.epochs_num)
 

@@ -32,6 +32,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import logging
+import time
+import subprocess
 
 # ---- project imports ----
 from config import DatasetConfig, TrainConfig
@@ -74,22 +76,46 @@ CLIP_GRAD       = 1.0
 cfg_train = TrainConfig()
 cfg_dataset = DatasetConfig()
 
-log_dir  = cfg_train.log_path
-log_path = log_dir if isinstance(log_dir, Path) else Path(log_dir)
-if log_path.is_file():
-    pass
-else:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+SEP = "=" * 80
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(message)s",
-    handlers=[
-        logging.FileHandler(str(cfg_train.log_path)),
-        logging.StreamHandler(),
-    ],
-)
-logger = logging.getLogger("GA_Predrnn")
+MODEL_NAME = "GA_Predrnn"
+log_file = cfg_train.log_path / f"{MODEL_NAME}.log"
+log_file.parent.mkdir(parents=True, exist_ok=True)
+
+logger = logging.getLogger(f"train.{MODEL_NAME}")
+logger.setLevel(logging.INFO)
+logger.handlers.clear()
+fh = logging.FileHandler(str(log_file), encoding="utf-8")
+fh.setLevel(logging.INFO)
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+fmt = logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+fh.setFormatter(fmt)
+ch.setFormatter(fmt)
+logger.addHandler(fh)
+logger.addHandler(ch)
+
+
+def _get_gpu_info():
+    """Return (mem_used_mb, mem_total_mb, gpu_util_pct) or (0, 0, "N/A") on failure."""
+    if not torch.cuda.is_available():
+        return 0, 0, "N/A"
+    try:
+        mem_reserved = torch.cuda.memory_reserved() / (1024 * 1024)
+        mem_total = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
+        util = "N/A"
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                util = result.stdout.strip() + "%"
+        except Exception:
+            pass
+        return int(mem_reserved), int(mem_total), util
+    except Exception:
+        return 0, 0, "N/A"
 
 
 # ================================================================== #
@@ -185,7 +211,6 @@ def main():
     torch.manual_seed(42)
     np.random.seed(42)
     device = cfg_train.device
-    logger.info(f"device: {device}")
 
     # ---- data ----
     tec_scaler = MinMaxScaler()
@@ -235,6 +260,16 @@ def main():
     logger.info(f"predictor     params: {sum(p.numel() for p in predictor.parameters()):,}")
     logger.info(f"discriminator params: {sum(p.numel() for p in discriminator.parameters()):,}")
 
+    # ---- log header ----
+    total_params = sum(p.numel() for p in predictor.parameters()) + sum(p.numel() for p in discriminator.parameters())
+    logger.info(SEP)
+    logger.info(f"Model: {MODEL_NAME}")
+    logger.info(f"Hyperparameters: batch_size={BATCH_SIZE}, epochs_num={EPOCHS}, patience={PATIENCE}, g_lr={G_LR}, d_lr={D_LR}")
+    logger.info(f"Dataset: Train: {cfg_dataset.start_month_train}-{cfg_dataset.end_month_train}, Val: {cfg_dataset.start_month_val}-{cfg_dataset.end_month_val}")
+    logger.info(f"Parameters: predictor={sum(p.numel() for p in predictor.parameters()):,}, discriminator={sum(p.numel() for p in discriminator.parameters()):,}, total={total_params:,}")
+    logger.info(f"Loss Function: HingeGAN (L1_tec + L1_aux + hinge)")
+    logger.info(SEP)
+
     opt_g = optim.Adam(predictor.parameters(),     lr=G_LR)
     opt_d = optim.Adam(discriminator.parameters(), lr=D_LR)
     scheduler_g = optim.lr_scheduler.ReduceLROnPlateau(opt_g, mode="min", factor=0.5, patience=5)
@@ -248,6 +283,8 @@ def main():
     best_val = float("inf")
     patience_counter = 0
     history = {"train_d": [], "train_g": [], "val_loss": [], "val_rmse": []}
+
+    start_time = time.time()
 
     for epoch in range(1, EPOCHS + 1):
         logger.info(f"===== Epoch {epoch}/{EPOCHS} =====")
@@ -265,12 +302,18 @@ def main():
         history["val_loss"].append(val_loss)
         history["val_rmse"].append(val_metrics["RMSE"])
 
+        current_lr = opt_g.param_groups[0]["lr"]
+        gpu_mem_used, gpu_mem_total, gpu_util = _get_gpu_info()
+
         logger.info(
             f"Epoch {epoch:3d} | "
             f"D_loss {loss_d:.5f} | G_loss {loss_g:.5f} | "
             f"val_L1 {val_loss:.5f} | "
             f"RMSE {val_metrics['RMSE']:.4f} R2 {val_metrics['R2']:.4f} "
-            f"SSIM {val_metrics['SSIM']:.4f}"
+            f"SSIM {val_metrics['SSIM']:.4f} | "
+            f"LR {current_lr:.2e} | "
+            f"GPU Mem {gpu_mem_used}/{gpu_mem_total} MB | "
+            f"GPU Util {gpu_util}"
         )
 
         # early stopping on val_loss
@@ -311,6 +354,12 @@ def main():
     plt.close()
     logger.info(f"plots saved to {pic_dir / 'ga_predrnn_train_loss.png'}")
 
+    elapsed = time.time() - start_time
+    h, rem = divmod(int(elapsed), 3600)
+    m, s = divmod(rem, 60)
+    logger.info(f"Best val loss: {best_val:.5f}")
+    logger.info(f"Total time: {h}h {m}m {s}s")
+    logger.info(SEP)
     logger.info("Training complete.")
 
 
