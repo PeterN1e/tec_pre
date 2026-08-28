@@ -16,7 +16,7 @@ from common.Data_Preprocessing import inverse_transform_predictions
 
 import os
 import matplotlib.pyplot as plt
-from common.EvaluationMetrics import print_evaluation
+from common.EvaluationMetrics import print_evaluation, log_evaluation
 
 cfg_dataset = DatasetConfig()
 cfg_train = TrainConfig()
@@ -163,6 +163,19 @@ def model_predict_only():
 
     # 使用新的逐步评估函数，符合TEC预测论文标准
     print_evaluation(pre_4d, act_4d)
+
+    # 将评估指标写入当前模型对应的训练日志末尾
+    import logging
+    eval_logger = logging.getLogger(f"train.{cfg_train.model_name}")
+    if not eval_logger.handlers:
+        log_file = cfg_train.log_path / f"{cfg_train.model_name}.log"
+        fh = logging.FileHandler(str(log_file), encoding="utf-8")
+        fh.setLevel(logging.INFO)
+        fmt = logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        fh.setFormatter(fmt)
+        eval_logger.addHandler(fh)
+        eval_logger.setLevel(logging.INFO)
+    log_evaluation(eval_logger, pre_4d, act_4d)
 
     # delta用于图片展示
     delta_4d = act_4d - pre_4d

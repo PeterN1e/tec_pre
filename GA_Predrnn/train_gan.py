@@ -38,7 +38,7 @@ import subprocess
 # ---- project imports ----
 from config import DatasetConfig, TrainConfig
 from common.dataloader1 import TecIonosphereDataset
-from common.EvaluationMetrics import evaluate_all
+from common.EvaluationMetrics import evaluate_all, log_evaluation
 from GA_Predrnn.GA_Predrnn import GAPredrnnPredictor
 from GA_Predrnn.discriminator import Discriminator, hinge_loss_d, hinge_loss_g
 
@@ -359,6 +359,20 @@ def main():
     m, s = divmod(rem, 60)
     logger.info(f"Best val loss: {best_val:.5f}")
     logger.info(f"Total time: {h}h {m}m {s}s")
+
+    # ---- final evaluation on validation set ----
+    val_pred, val_true = [], []
+    with torch.no_grad():
+        for tec_in, aux_in, tec_gt, aux_gt in val_loader:
+            tec_in = tec_in.to(device)
+            aux_in = aux_in.to(device)
+            pred_tec = predictor(tec_in, aux_in)
+            val_pred.append(pred_tec.cpu().numpy())
+            val_true.append(tec_gt.cpu().numpy())
+    val_pred_np = np.concatenate(val_pred, axis=0)
+    val_true_np = np.concatenate(val_true, axis=0)
+    log_evaluation(logger, val_pred_np, val_true_np)
+
     logger.info(SEP)
     logger.info("Training complete.")
 

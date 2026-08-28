@@ -137,6 +137,34 @@ def print_evaluation(pred, target, ssim_window=11, ssim_sigma=1.5):
     print("=" * 60)
 
 
+
+
+def log_evaluation(logger, pred, target, ssim_window=11, ssim_sigma=1.5):
+    """Log evaluation metrics to the provided logger."""
+    agg = evaluate_all(pred, target, ssim_window, ssim_sigma)
+    step = evaluate_per_step(pred, target, ssim_window, ssim_sigma)
+    T = pred.shape[1]
+    max_h = 2 * T
+
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info("  Evaluation Metrics")
+    logger.info("=" * 60)
+    for k, v in agg.items():
+        logger.info(f"  {k:>6s} : {v:.6f}")
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info(f"  Per-Step Metrics (t+2h ~ t+{max_h}h)")
+    logger.info("=" * 60)
+    logger.info(f"  {'Step':>6s} {'Horizon':>8s} | {'RMSE':>8s} {'MAE':>8s} {'R2':>8s} {'SSIM':>8s}")
+    logger.info("  " + "-" * 56)
+    for t in range(T):
+        h = 2 * (t + 1)
+        horizon = f"t+{h}h"
+        logger.info(f"  {t+1:>6d} {horizon:>8s} | "
+              f"{step['RMSE'][t]:8.4f} {step['MAE'][t]:8.4f} "
+              f"{step['R2'][t]:8.4f} {step['SSIM'][t]:8.4f}")
+    logger.info("=" * 60)
 # ============================================================
 #  5. 测试代码
 # ============================================================

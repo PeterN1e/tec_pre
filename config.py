@@ -55,12 +55,12 @@ class FusionConfig:
 
 @dataclass
 class DatasetConfig:
-    start_month_train = 200201
-    end_month_train = 200208
-    start_month_val = 200209
-    end_month_val = 200210
-    start_month_test = 200211
-    end_month_test = 200211
+    start_month_train = 200901
+    end_month_train = 201812
+    start_month_val = 201901
+    end_month_val = 202012
+    start_month_test = 202101
+    end_month_test = 202412
     aux_dim : int = 6
     tec_dir = dataset_base_path/"tec_ionex_npy/igsg"  # tec图cdf文件夹路径
     indices_dir = dataset_base_path/"indices"
@@ -133,3 +133,8 @@ class EDAutoformerConfig:
     activation: str = "gelu"
     encode_channels: tuple = (64, 128, 256, 512)  # TEC 编码器通道数
     label_len: int = None         # 解码器已知标签长度, None 时取 input_length // 2
+
+@dataclass
+class DataAnalysisConfig:
+    start_month_analysis = 200501
+    end_month_analysis = 200502
