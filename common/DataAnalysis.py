@@ -57,7 +57,7 @@ def main():
         end_month=DataAnalysisConfig.end_month_analysis,
         input_day_num=3,
         is_train=False,
-        tec_scaler=None,d
+        tec_scaler=None,
         aux_scaler=None,
     )
 

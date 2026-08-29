@@ -526,6 +526,9 @@ class EDAutoformer(nn.Module):
         self.enc_embedding = DataEmbedding(d_in, d_model, dropout)
         self.dec_embedding = DataEmbedding(d_in, d_model, dropout)
         self.decomp = SeriesDecompBlock1D(moving_avg)
+        # 初始趋势来自输入通道(64 TEC + 6 aux), 需投影到输出通道(64 TEC),
+        # 才能与解码器逐层累积的残差趋势(维度为 c_out)相加
+        self.trend_proj = nn.Linear(d_in, self.tec_c_out)
         self.encoder = Encoder(d_model, d_ff, e_layers, factor, dropout, activation, moving_avg)
         self.decoder = Decoder(
             d_model, d_ff, d_layers, factor, dropout, activation, moving_avg, c_out=self.tec_c_out
@@ -569,6 +572,7 @@ class EDAutoformer(nn.Module):
         )
         mean_series = torch.mean(x_series, dim=1, keepdim=True).repeat(1, self.pred_len, 1)
         dec_trend = torch.cat([trend_init[:, -self.label_len:, :], mean_series], dim=1)
+        dec_trend = self.trend_proj(dec_trend)              # (B, L_dec, 64)
 
         # ---------- Autoformer 编码 - 解码 ----------
         enc_feat, _ = self.encoder(self.enc_embedding(x_series))
