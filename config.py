@@ -24,7 +24,8 @@ if platform.system() == "Windows":
     dataset_base_path = Path("D:/Dataset_tec_NLY")
 else:
     dataset_base_path = Path("/mnt/d/Dataset_tec_NLY")  # 或你的 Linux 挂载路径
-
+#=================================#
+#=================================#
 model_select = 4
 if model_select == 1:
     model_name = "E_P_D"
@@ -76,6 +77,7 @@ class TrainConfig:
     input_length: int = input_day_num*12
     output_length : int = output_day_num*12
     lr : float = 1e-3
+    use_amp : bool = False          # 混合精度训练开关，默认关闭
     log_path : str = log_path
     pic_path : str = pic_path
     model_path : str = model_path
@@ -87,7 +89,9 @@ class EDCGConvLSTMConfig:
     output_dim: int = 1
     num_layers: int = 4
     kernel_size: int = 3
-    hidden_dim: int = 24
+    hidden_dim: int = 60
+    use_checkpoint: bool = True     # 显存优化：反向时重算 cell 内部激活
+    use_torch_compile: bool = False  # 编译前向加速；Windows 无 Triton 时回退，默认关闭
     H : int =  71
     W : int = 73
 @dataclass

@@ -74,6 +74,8 @@ class TrainModel:
         self.best_test_loss = float("inf")
         self.counter = 0
         self.early_stop = False
+        self.use_amp = getattr(cfg_train, "use_amp", False)
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
         # ---- per-model logger ----
         log_file = cfg_train.log_path / f"{self.model_name}.log"
@@ -120,13 +122,20 @@ class TrainModel:
                 batch_exp_tec = batch_exp_tec.float().to(self.device)
                 batch_exp_aux = batch_exp_aux.float().to(self.device)
 
-                output = self.model(batch_in_tec, batch_in_aux)
-
-                loss = self.criterion(output, batch_exp_tec)
+                with torch.cuda.amp.autocast(enabled=self.use_amp):
+                    output = self.model(batch_in_tec, batch_in_aux)
+                    loss = self.criterion(output, batch_exp_tec)
                 self.optimizer.zero_grad()
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                self.optimizer.step()
+                if self.use_amp:
+                    self.scaler.scale(loss).backward()
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    self.optimizer.step()
 
                 train_loss += loss.item()
                 avg_loss = train_loss / (pbar.n + 1)
@@ -141,8 +150,9 @@ class TrainModel:
                     batch_in_tec = batch_in_tec.float().to(self.device)
                     batch_in_aux = batch_in_aux.float().to(self.device)
                     batch_exp_tec = batch_exp_tec.float().to(self.device)
-                    outputs = self.model(batch_in_tec, batch_in_aux)
-                    test_loss += self.criterion(outputs, batch_exp_tec).item()
+                    with torch.cuda.amp.autocast(enabled=self.use_amp):
+                        outputs = self.model(batch_in_tec, batch_in_aux)
+                        test_loss += self.criterion(outputs, batch_exp_tec).item()
 
             avg_train_loss = train_loss / len(self.train_loader)
             avg_test_loss = test_loss / len(self.test_loader)
