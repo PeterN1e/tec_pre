@@ -90,7 +90,7 @@ class EDCGConvLSTMConfig:
     num_layers: int = 4
     kernel_size: int = 3
     hidden_dim: int = 60
-    use_checkpoint: bool = True     # 显存优化：反向时重算 cell 内部激活
+    use_checkpoint: bool = False    # 显存优化：反向时重算 cell 内部激活；显存充足时应关闭
     use_torch_compile: bool = False  # 编译前向加速；Windows 无 Triton 时回退，默认关闭
     H : int =  71
     W : int = 73

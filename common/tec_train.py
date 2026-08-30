@@ -11,6 +11,10 @@ import subprocess
 from tqdm import tqdm
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
+# 输入空间尺寸固定时，让 cuDNN 自动挑选最快卷积算法
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
+
 SEP = "=" * 80
 
 
