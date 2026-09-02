@@ -26,6 +26,8 @@ elif model_name == "ED_CGConvLSTM":
 elif model_name == "ED_Autoformer":
     # 文件夹名含连字符, 不能直接 import, 使用 importlib 动态导入
     from ED_Autoformer.ED_Autoformer import EDAutoformer as Model
+elif model_name == "ModelCanon":
+    from ModelCanon.ModelCanon import ModelCanon as Model
 else:
     raise ValueError("模型不存在")
 
@@ -50,6 +52,8 @@ class ModelAll(nn.Module):
             x = self.model(x)
             x = x.squeeze(2)
         elif self.model_name == "ED_Autoformer":
+            x = self.model(tec, aux)
+        elif self.model_name == "ModelCanon":
             x = self.model(tec, aux)
         else:
             raise ValueError("model_selector.py,模型选择错误")

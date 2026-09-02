@@ -35,6 +35,8 @@ elif model_select == 3:
     model_name = "GA_Predrnn"
 elif model_select == 4:
     model_name = "ED_Autoformer"
+elif model_select == 5:
+    model_name = "ModelCanon"
 else:
     raise ValueError("模型不存在")
 
@@ -137,6 +139,16 @@ class EDAutoformerConfig:
     activation: str = "gelu"
     encode_channels: tuple = (64, 128, 256, 512)  # TEC 编码器通道数
     label_len: int = None         # 解码器已知标签长度, None 时取 input_length // 2
+
+@dataclass
+class ModelCanonConfig:
+    d_model: int = 256
+    n_heads: int = 8
+    e_layers: int = 4
+    decoder_layers: int = 2
+    d_ff: int = 1024
+    dropout: float = 0.1
+    patch_size: int = 4
 
 @dataclass
 class DataAnalysisConfig:
