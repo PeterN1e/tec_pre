@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -30,6 +29,7 @@ class ModelCanon(nn.Module):
         d_ff=cfg_model.d_ff,
         dropout=cfg_model.dropout,
         patch_size=cfg_model.patch_size,
+        prediction_mode="absolute",
     ):
         super().__init__()
         self.input_length = input_length
@@ -38,24 +38,18 @@ class ModelCanon(nn.Module):
         self.width = width
         self.d_model = d_model
         self.patch_size = patch_size
+        self.prediction_mode = prediction_mode
 
-        # Pad each frame to a multiple of patch_size so no boundary pixel
-        # is dropped: 71x73 -> 72x76 -> 18x19 = 342 patch tokens.
         self.pad_h = (-height) % patch_size
         self.pad_w = (-width) % patch_size
         self.grid_h = (height + self.pad_h) // patch_size
         self.grid_w = (width + self.pad_w) // patch_size
         self.num_patches = self.grid_h * self.grid_w
 
-        self.patch_embed = nn.Conv2d(
-            1, d_model, kernel_size=patch_size, stride=patch_size
-        )
-        self.pos_embed = nn.Parameter(
-            torch.randn(1, 1, self.num_patches, d_model) * 0.02
-        )
+        self.patch_embed = nn.Conv2d(1, d_model, kernel_size=patch_size, stride=patch_size)
+        self.pos_embed = nn.Parameter(torch.randn(1, 1, self.num_patches, d_model) * 0.02)
         self.dropout = nn.Dropout(dropout)
 
-        # FiLM modulation of patch embeddings using physical indices.
         self.film = FilmFusion(aux_dim=aux_dim, channel=d_model, out_dim=3)
 
         encoder_layer = nn.TransformerEncoderLayer(
@@ -66,9 +60,7 @@ class ModelCanon(nn.Module):
             batch_first=True,
             norm_first=True,
         )
-        self.temporal_encoder = nn.TransformerEncoder(
-            encoder_layer, num_layers=e_layers
-        )
+        self.temporal_encoder = nn.TransformerEncoder(encoder_layer, num_layers=e_layers)
 
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=d_model,
@@ -78,72 +70,61 @@ class ModelCanon(nn.Module):
             batch_first=True,
             norm_first=True,
         )
-        self.decoder = nn.TransformerDecoder(
-            decoder_layer, num_layers=decoder_layers
-        )
-        self.pred_queries = nn.Parameter(
-            torch.randn(output_length, d_model) * (d_model ** -0.5)
-        )
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=decoder_layers)
+        self.pred_queries = nn.Parameter(torch.randn(output_length, d_model) * (d_model ** -0.5))
 
         self.head = nn.Linear(d_model, height * width)
 
     def _tokenize(self, tec, aux):
-        """tec: (B, T, H, W), aux: (B, T, aux_dim) -> (B, T, N, d_model)."""
         B, T, H, W = tec.shape
         assert (H, W) == (self.height, self.width), (
             f"Expected input grid ({self.height}, {self.width}), got ({H}, {W})"
         )
         x = F.pad(tec, (0, self.pad_w, 0, self.pad_h))
-        x = x.reshape(
-            B * T,
-            1,
-            self.grid_h * self.patch_size,
-            self.grid_w * self.patch_size,
-        )
-        x = self.patch_embed(x)                       # (B*T, d_model, gh, gw)
+        x = x.reshape(B * T, 1, self.grid_h * self.patch_size, self.grid_w * self.patch_size)
+        x = self.patch_embed(x)
         x = x.reshape(B, T, self.d_model, self.grid_h, self.grid_w)
-        x = self.film(x, aux)                         # FiLM modulation
+        x = self.film(x, aux)
         x = x.reshape(B, T, self.num_patches, self.d_model)
         x = x + self.pos_embed
         return self.dropout(x)
 
     def _temporal_encode(self, x):
-        """Channel-independent temporal attention over (B, T, N, d_model)."""
         B, T, N, D = x.shape
         x = x.permute(0, 2, 1, 3).reshape(B * N, T, D)
         x = self.temporal_encoder(x)
         return x.reshape(B, N, T, D).permute(0, 2, 1, 3)
 
     def forward_delta(self, tec, aux):
-        """Return pure delta TEC: (B, output_length, H, W)."""
         B = tec.shape[0]
         x = self._tokenize(tec, aux)
-        x = self._temporal_encode(x)                  # (B, T, N, d_model)
-
+        x = self._temporal_encode(x)
         queries = self.pred_queries.unsqueeze(0).expand(B, -1, -1)
-        memory = x.reshape(
-            B, self.input_length * self.num_patches, self.d_model
-        )
-        dec = self.decoder(queries, memory)           # (B, T_out, d_model)
-
-        delta = self.head(dec)
-        return delta.view(B, self.output_length, self.height, self.width)
+        memory = x.reshape(B, self.input_length * self.num_patches, self.d_model)
+        dec = self.decoder(queries, memory)
+        delta = self.head(dec).view(B, self.output_length, self.height, self.width)
+        if self.prediction_mode == "residual":
+            return delta
+        return delta - tec[:, -1:, :, :]
 
     def forward(self, tec, aux):
-        """Absolute TEC prediction = last input frame + predicted delta."""
-        delta = self.forward_delta(tec, aux)
-        return tec[:, -1:, :, :] + delta
+        B = tec.shape[0]
+        x = self._tokenize(tec, aux)
+        x = self._temporal_encode(x)
+        queries = self.pred_queries.unsqueeze(0).expand(B, -1, -1)
+        memory = x.reshape(B, self.input_length * self.num_patches, self.d_model)
+        dec = self.decoder(queries, memory)
+        out = self.head(dec).view(B, self.output_length, self.height, self.width)
+        if self.prediction_mode == "residual":
+            return tec[:, -1:, :, :] + out
+        return out
 
 
 if __name__ == "__main__":
     torch.manual_seed(0)
     model = ModelCanon().to(cfg_train.device)
-    tec = torch.randn(
-        2, cfg_train.input_length, 71, 73, device=cfg_train.device
-    )
-    aux = torch.randn(
-        2, cfg_train.input_length, cfg_dataset.aux_dim, device=cfg_train.device
-    )
+    tec = torch.randn(2, cfg_train.input_length, 71, 73, device=cfg_train.device)
+    aux = torch.randn(2, cfg_train.input_length, cfg_dataset.aux_dim, device=cfg_train.device)
 
     pred = model(tec, aux)
     delta = model.forward_delta(tec, aux)
