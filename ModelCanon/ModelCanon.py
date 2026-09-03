@@ -29,7 +29,6 @@ class ModelCanon(nn.Module):
         d_ff=cfg_model.d_ff,
         dropout=cfg_model.dropout,
         patch_size=cfg_model.patch_size,
-        prediction_mode="absolute",
     ):
         super().__init__()
         self.input_length = input_length
@@ -38,7 +37,6 @@ class ModelCanon(nn.Module):
         self.width = width
         self.d_model = d_model
         self.patch_size = patch_size
-        self.prediction_mode = prediction_mode
 
         self.pad_h = (-height) % patch_size
         self.pad_w = (-width) % patch_size
@@ -103,21 +101,12 @@ class ModelCanon(nn.Module):
         memory = x.reshape(B, self.input_length * self.num_patches, self.d_model)
         dec = self.decoder(queries, memory)
         delta = self.head(dec).view(B, self.output_length, self.height, self.width)
-        if self.prediction_mode == "residual":
-            return delta
-        return delta - tec[:, -1:, :, :]
+        return delta
 
     def forward(self, tec, aux):
-        B = tec.shape[0]
-        x = self._tokenize(tec, aux)
-        x = self._temporal_encode(x)
-        queries = self.pred_queries.unsqueeze(0).expand(B, -1, -1)
-        memory = x.reshape(B, self.input_length * self.num_patches, self.d_model)
-        dec = self.decoder(queries, memory)
-        out = self.head(dec).view(B, self.output_length, self.height, self.width)
-        if self.prediction_mode == "residual":
-            return tec[:, -1:, :, :] + out
-        return out
+        """Reconstruct day 4 as day 3 same-hour baseline + predicted delta."""
+        delta = self.forward_delta(tec, aux)
+        return tec[:, -12:, :, :] + delta
 
 
 if __name__ == "__main__":
