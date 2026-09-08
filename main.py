@@ -67,6 +67,11 @@ def main():
     criterion_mse = nn.MSELoss()
     criterion_mae = nn.L1Loss()
     criterion_l1smooth = nn.SmoothL1Loss()
+    criterion_name = "L1Loss"
+    if cfg_train.model_name == "ModelCanon":
+        from common.loss_function import DeltaCriterion
+        criterion_mae = DeltaCriterion(model.model)
+        criterion_name = "DeltaCriterion"
     optimizer=optim.Adam(model.parameters(),lr = cfg_train.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
@@ -85,7 +90,7 @@ def main():
                            train_loader = train_dataloader,
                            test_loader = val_dataloader,
                            criterion = criterion_mae,
-                           criterion_name = "L1Loss",
+                           criterion_name = criterion_name,
                            optimizer =optimizer,
                            scheduler =scheduler,
                            save_best = True,

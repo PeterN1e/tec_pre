@@ -127,10 +127,13 @@ class TrainModel:
                 batch_exp_aux = batch_exp_aux.float().to(self.device)
 
                 with torch.cuda.amp.autocast(enabled=self.use_amp):
-                    output = self.model(batch_in_tec, batch_in_aux)
-                    loss = self.criterion(output, batch_exp_tec)
+                    if getattr(self.criterion, "_needs_context", False):
+                        loss = self.criterion(batch_in_tec, batch_in_aux, batch_exp_tec)
+                    else:
+                        output = self.model(batch_in_tec, batch_in_aux)
+                        loss = self.criterion(output, batch_exp_tec)
                 self.optimizer.zero_grad()
-                if self.use_amp:
+                if self.use_amp:   #使用自动混合精度训练
                     self.scaler.scale(loss).backward()
                     self.scaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
@@ -155,8 +158,11 @@ class TrainModel:
                     batch_in_aux = batch_in_aux.float().to(self.device)
                     batch_exp_tec = batch_exp_tec.float().to(self.device)
                     with torch.cuda.amp.autocast(enabled=self.use_amp):
-                        outputs = self.model(batch_in_tec, batch_in_aux)
-                        test_loss += self.criterion(outputs, batch_exp_tec).item()
+                        if getattr(self.criterion, "_needs_context", False):
+                            test_loss += self.criterion(batch_in_tec, batch_in_aux, batch_exp_tec).item()
+                        else:
+                            outputs = self.model(batch_in_tec, batch_in_aux)
+                            test_loss += self.criterion(outputs, batch_exp_tec).item()
 
             avg_train_loss = train_loss / len(self.train_loader)
             avg_test_loss = test_loss / len(self.test_loader)
