@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from config import DatasetConfig,TrainConfig
+from config import DatasetConfig, TrainConfig, ModelCanonConfig
 import numpy as np
 from torch.utils.data import DataLoader
 import joblib
@@ -72,7 +72,13 @@ def main():
         from common.loss_function import DeltaCriterion
         criterion_mae = DeltaCriterion(model.model)
         criterion_name = "DeltaCriterion"
-    optimizer=optim.Adam(model.parameters(),lr = cfg_train.lr)
+        model_canon_cfg = ModelCanonConfig()
+        train_lr = model_canon_cfg.lr
+        train_patience = model_canon_cfg.patience
+    else:
+        train_lr = cfg_train.lr
+        train_patience = cfg_train.patience
+    optimizer=optim.Adam(model.parameters(),lr = train_lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode='min',
@@ -94,7 +100,7 @@ def main():
                            optimizer =optimizer,
                            scheduler =scheduler,
                            save_best = True,
-                           patience = cfg_train.patience,
+                           patience = train_patience,
                            model_save_path = os.path.join(cfg_train.model_path,cfg_train.model_name, "model_state_dict.pth"))
     train_losses, test_losses = tec_train.train(cfg_train.epochs_num)
 

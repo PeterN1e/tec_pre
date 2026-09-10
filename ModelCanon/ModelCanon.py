@@ -72,6 +72,9 @@ class ModelCanon(nn.Module):
         self.pred_queries = nn.Parameter(torch.randn(output_length, d_model) * (d_model ** -0.5))
 
         self.head = nn.Linear(d_model, height * width)
+        # Learnable day-over-day trend shortcut, initialized from the
+        # empirical mean-reversion observed in the data.
+        self.trend_alpha = nn.Parameter(torch.tensor(-0.4))
 
     def _tokenize(self, tec, aux):
         B, T, H, W = tec.shape
@@ -101,6 +104,8 @@ class ModelCanon(nn.Module):
         memory = x.reshape(B, self.input_length * self.num_patches, self.d_model)
         dec = self.decoder(queries, memory)
         delta = self.head(dec).view(B, self.output_length, self.height, self.width)
+        trend = tec[:, -self.output_length:] - tec[:, -2 * self.output_length:-self.output_length]
+        delta = delta + self.trend_alpha * trend
         return delta
 
     def forward(self, tec, aux):

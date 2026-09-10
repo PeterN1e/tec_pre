@@ -147,8 +147,10 @@ class ModelCanonConfig:
     e_layers: int = 4
     decoder_layers: int = 2
     d_ff: int = 1024
-    dropout: float = 0.1
+    dropout: float = 0.05
     patch_size: int = 4
+    lr: float = 5e-4
+    patience: int = 10
 
 @dataclass
 class DataAnalysisConfig:
