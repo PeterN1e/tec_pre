@@ -4,7 +4,7 @@ def scale_tec_aux_data(data, scaler, fit_scaler=True):
     """
     将tec数据进行降维 步骤：reshape → 缩放 → 恢复形状
     :param data: tec数据或辅助特征aux
-    :param scaler: 创建实例后的MinMaxScaler
+    :param scaler: 创建实例后的标准化器（MinMaxScaler/StandardScaler 等）
     :param fit_scaler: True则fit_transform（训练集），False则transform（测试集）
     :return:
     """

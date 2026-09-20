@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 import joblib
 import torch.optim as optim
 import warnings
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 from common.dataloader1 import TecIonosphereDataset
 from common.tec_train import TrainModel
 from common.pic_show7 import pic_show,datagram
@@ -32,8 +32,8 @@ def main():
     np.random.seed(42)
     warnings.filterwarnings('ignore')
 
-    tec_scaler = MinMaxScaler()
-    aux_scaler = MinMaxScaler()
+    tec_scaler = StandardScaler()
+    aux_scaler = StandardScaler()
 
     train_dataset = TecIonosphereDataset(
     tec_dir=cfg_dataset.tec_dir,

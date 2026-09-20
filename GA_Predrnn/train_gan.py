@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 from pathlib import Path
 import numpy as np
 import joblib
@@ -213,8 +213,8 @@ def main():
     device = cfg_train.device
 
     # ---- data ----
-    tec_scaler = MinMaxScaler()
-    aux_scaler = MinMaxScaler()
+    tec_scaler = StandardScaler()
+    aux_scaler = StandardScaler()
 
     train_ds = TecIonosphereDataset(
         tec_dir=cfg_dataset.tec_dir,
