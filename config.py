@@ -26,7 +26,7 @@ else:
     dataset_base_path = Path("/mnt/d/Dataset_tec_NLY")  # 或你的 Linux 挂载路径
 #=================================#
 #=================================#
-model_select = 4
+model_select = 3
 if model_select == 1:
     model_name = "E_P_D"
 elif model_select == 2:
