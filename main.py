@@ -105,7 +105,7 @@ def main():
             lambda_aux=preset.lambda_aux,
             adv_weight=preset.adv_weight,
             clip_grad=preset.clip_grad,
-            use_amp=cfg_train.use_amp,
+            use_amp=getattr(cfg_train, "use_amp", False),
             scheduler_g=scheduler_g,
             scheduler_d=scheduler_d,
         )
@@ -176,12 +176,12 @@ def model_predict_only():
         tec_dir=cfg_dataset.tec_dir,
         indices_dir=cfg_dataset.indices_dir,
         start_month=cfg_dataset.start_month_test, end_month=cfg_dataset.end_month_test,
-        input_day_num=cfg_train.input_day_num,
+        input_day_num=preset.input_day_num,
         is_train=False,
         tec_scaler = tec_scaler,
         aux_scaler = aux_scaler
     )
-    test_dataloader = DataLoader(test_dataset, batch_size=cfg_train.batch_size, shuffle=False, drop_last=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=preset.batch_size, shuffle=False, drop_last=True)
     model =ModelAll()
     model = model.to(cfg_train.device)
     save_dir = cfg_train.model_name
