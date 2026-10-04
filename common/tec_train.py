@@ -8,7 +8,10 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import logging
 import time
 import subprocess
+import numpy as np
+import torch.nn.functional as F
 from tqdm import tqdm
+from common.EvaluationMetrics import evaluate_all
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 # 输入空间尺寸固定时，让 cuDNN 自动挑选最快卷积算法
@@ -211,3 +214,217 @@ class TrainModel:
         self.logger.info(SEP)
 
         return train_losses, test_losses
+
+
+# ================================================================== #
+#  Reusable GAN training framework
+# ================================================================== #
+
+def _default_d_loss(score_real, score_fake):
+    """Hinge discriminator loss."""
+    return F.relu(1.0 - score_real).mean() + F.relu(1.0 + score_fake).mean()
+
+
+def _default_g_adv_loss(score_fake):
+    """Hinge generator adversarial loss."""
+    return -score_fake.mean()
+
+
+def _resolve_train_forward(generator):
+    fn = getattr(generator, "train_forward", None)
+    if fn is None and hasattr(generator, "model"):
+        fn = getattr(generator.model, "train_forward", None)
+    return fn
+
+
+def _generator_outputs(generator, tec, aux):
+    """Return (pred_tec, pred_aux); pred_aux is None when unavailable."""
+    fn = _resolve_train_forward(generator)
+    if fn is not None:
+        out = fn(tec, aux)
+        if isinstance(out, tuple):
+            pred_tec = out[0]
+            pred_aux = out[1] if len(out) > 1 else None
+            return pred_tec, pred_aux
+        return out, None
+    return generator(tec, aux), None
+
+
+@torch.no_grad()
+def _gan_validate(generator, loader, device):
+    generator.eval()
+    preds, trues = [], []
+    val_loss = 0.0
+    for tec_in, aux_in, tec_gt, _ in loader:
+        tec_in = tec_in.float().to(device)
+        aux_in = aux_in.float().to(device)
+        tec_gt = tec_gt.float().to(device)
+        pred_tec = generator(tec_in, aux_in)
+        val_loss += F.l1_loss(pred_tec, tec_gt).item()
+        preds.append(pred_tec.cpu().numpy())
+        trues.append(tec_gt.cpu().numpy())
+
+    pred_np = np.concatenate(preds, axis=0)
+    true_np = np.concatenate(trues, axis=0)
+    metrics = evaluate_all(pred_np, true_np)
+    avg_loss = val_loss / max(len(loader), 1)
+    return avg_loss, metrics
+
+
+def train_gan(
+    generator,
+    discriminator,
+    train_loader,
+    val_loader,
+    g_optimizer,
+    d_optimizer,
+    model_name,
+    model_save_path,
+    device,
+    epochs,
+    patience,
+    lambda_tec=1.0,
+    lambda_aux=0.1,
+    adv_weight=1.0,
+    clip_grad=1.0,
+    use_amp=False,
+    scheduler_g=None,
+    scheduler_d=None,
+    g_steps=1,
+    d_steps=1,
+    d_loss_fn=None,
+    g_adv_loss_fn=None,
+    log_path=None,
+):
+    """Reusable GAN trainer: alternating D/G steps with generator-only validation.
+
+    Model contract:
+        generator.forward(tec, aux) -> pred_tec
+        generator.train_forward(tec, aux) -> (pred_tec, pred_aux)  [optional]
+        discriminator(frame) -> score, frame shape (B*T, 1, H, W)
+    """
+    d_loss_fn = d_loss_fn or _default_d_loss
+    g_adv_loss_fn = g_adv_loss_fn or _default_g_adv_loss
+
+    log_dir = log_path or cfg_train.log_path
+    logger = logging.getLogger(f"gan.{model_name}")
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    fh = logging.FileHandler(os.path.join(log_dir, f"{model_name}.log"), encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+    disc_save_path = os.path.join(os.path.dirname(model_save_path), "discriminator_state_dict.pth")
+    best_val_loss = float("inf")
+    counter = 0
+    history = {"train_d": [], "train_g": [], "val_loss": [], "val_rmse": [], "val_r2": [], "val_ssim": []}
+
+    total_params = sum(p.numel() for p in generator.parameters()) + sum(p.numel() for p in discriminator.parameters())
+    logger.info(SEP)
+    logger.info(f"Model: {model_name} (GAN)")
+    logger.info(f"Hyperparameters: epochs={epochs}, patience={patience}, g_steps={g_steps}, d_steps={d_steps}")
+    logger.info(f"Loss weights: lambda_tec={lambda_tec}, lambda_aux={lambda_aux}, adv_weight={adv_weight}")
+    logger.info(f"Parameters: generator={sum(p.numel() for p in generator.parameters()):,}, "
+                f"discriminator={sum(p.numel() for p in discriminator.parameters()):,}, total={total_params:,}")
+    logger.info(SEP)
+
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    start_time = time.time()
+
+    for epoch in range(1, epochs + 1):
+        generator.train()
+        discriminator.train()
+        running_d = running_g = 0.0
+        pbar = tqdm(train_loader, total=len(train_loader), ncols=100, desc=f"Epoch {epoch}/{epochs}", leave=False)
+
+        for batch_in_tec, batch_in_aux, batch_exp_tec, batch_exp_aux in pbar:
+            batch_in_tec = batch_in_tec.float().to(device)
+            batch_in_aux = batch_in_aux.float().to(device)
+            batch_exp_tec = batch_exp_tec.float().to(device)
+            batch_exp_aux = batch_exp_aux.float().to(device)
+            B, T_out, H, W = batch_exp_tec.shape
+            real = batch_exp_tec.reshape(B * T_out, 1, H, W)
+
+            # ---- Discriminator steps ----
+            for _ in range(d_steps):
+                with torch.no_grad():
+                    pred_tec_d, _ = _generator_outputs(generator, batch_in_tec, batch_in_aux)
+                fake = pred_tec_d.detach().reshape(B * T_out, 1, H, W)
+                score_real = discriminator(real)
+                score_fake = discriminator(fake)
+                loss_d = d_loss_fn(score_real, score_fake)
+                d_optimizer.zero_grad()
+                scaler.scale(loss_d).backward()
+                scaler.step(d_optimizer)
+                scaler.update()
+
+            # ---- Generator steps ----
+            for _ in range(g_steps):
+                pred_tec, pred_aux = _generator_outputs(generator, batch_in_tec, batch_in_aux)
+                fake = pred_tec.reshape(B * T_out, 1, H, W)
+                score_fake = discriminator(fake)
+                loss_tec = F.l1_loss(pred_tec, batch_exp_tec)
+                loss_adv = g_adv_loss_fn(score_fake)
+                loss_g = lambda_tec * loss_tec + adv_weight * loss_adv
+                if pred_aux is not None:
+                    loss_aux = F.l1_loss(pred_aux, batch_exp_aux[:, :, [2, 3, 4]])
+                    loss_g = loss_g + lambda_aux * loss_aux
+                g_optimizer.zero_grad()
+                scaler.scale(loss_g).backward()
+                scaler.unscale_(g_optimizer)
+                torch.nn.utils.clip_grad_norm_(generator.parameters(), clip_grad)
+                scaler.step(g_optimizer)
+                scaler.update()
+
+            running_d += loss_d.item()
+            running_g += loss_g.item()
+            pbar.set_postfix(loss_D=f"{loss_d.item():.4f}", loss_G=f"{loss_g.item():.4f}")
+
+        avg_d = running_d / max(len(train_loader), 1)
+        avg_g = running_g / max(len(train_loader), 1)
+        val_loss, val_metrics = _gan_validate(generator, val_loader, device)
+
+        for sched in (scheduler_g, scheduler_d):
+            if sched is not None:
+                if isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    sched.step(val_loss)
+                else:
+                    sched.step()
+
+        history["train_d"].append(avg_d)
+        history["train_g"].append(avg_g)
+        history["val_loss"].append(val_loss)
+        history["val_rmse"].append(val_metrics["RMSE"])
+        history["val_r2"].append(val_metrics["R2"])
+        history["val_ssim"].append(val_metrics["SSIM"])
+
+        gpu_mem_used, gpu_mem_total, gpu_util = _get_gpu_info()
+        logger.info(
+            f"Epoch {epoch:3d} | D {avg_d:.5f} | G {avg_g:.5f} | "
+            f"Val L1 {val_loss:.5f} | RMSE {val_metrics['RMSE']:.4f} "
+            f"R2 {val_metrics['R2']:.4f} SSIM {val_metrics['SSIM']:.4f} | "
+            f"GPU Mem {gpu_mem_used}/{gpu_mem_total} MB | GPU Util {gpu_util}"
+        )
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            counter = 0
+            torch.save(generator.state_dict(), model_save_path)
+            torch.save(discriminator.state_dict(), disc_save_path)
+            logger.info(f"Best GAN model saved at epoch {epoch} with val loss {val_loss:.5f}")
+        else:
+            counter += 1
+            if counter >= patience:
+                logger.info(f"Early stopping triggered at epoch {epoch}")
+                break
+
+    elapsed = time.time() - start_time
+    h, rem = divmod(int(elapsed), 3600)
+    m, s = divmod(rem, 60)
+    logger.info(f"Best val loss: {best_val_loss:.5f}")
+    logger.info(f"Total time: {h}h {m}m {s}s")
+    logger.info(SEP)
+    return history

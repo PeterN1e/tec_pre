@@ -4,11 +4,12 @@ import numpy as np
 from config import TrainConfig
 cfg_train = TrainConfig()
 class TecPredict(nn.Module):
-    def __init__(self,model,test_loader):
+    def __init__(self, model, test_loader, return_aux=False):
         super().__init__()
         self.model = model
         self.test_loader = test_loader
         self.device = cfg_train.device
+        self.return_aux = return_aux
     def forward(self,frame_num=1):
         """
         :param frame_num: 预测的帧数
@@ -18,6 +19,7 @@ class TecPredict(nn.Module):
         predictions = []
         actuals = []
         physical_value = []
+        aux_predictions = []
         with torch.no_grad():
             for batch_in_tec,batch_in_aux,batch_exp_tec,batch_exp_aux in self.test_loader:
                 batch_in_tec = batch_in_tec.float().to(self.device) #(batch_size,seq_length,71,73)
@@ -26,6 +28,10 @@ class TecPredict(nn.Module):
                 batch_exp_tec = batch_exp_tec.float().to(self.device)
                 batch_exp_aux = batch_exp_aux.float().to(self.device)
                 output = self.model(batch_in_tec,batch_in_aux)
+                if isinstance(output, tuple):
+                    output, pred_aux = output
+                else:
+                    pred_aux = None
                 print(f"预测第{frame_num}组")
                 frame_num += 1
                 #prediction6.py 使用 np.array(delta) 时未先转移到 CPU
@@ -33,6 +39,15 @@ class TecPredict(nn.Module):
                 predictions.append(output.cpu().numpy())
                 actuals.append(batch_exp_tec.cpu().numpy())
                 physical_value.append(batch_exp_aux.cpu().numpy())
+                if self.return_aux and pred_aux is not None:
+                    aux_predictions.append(pred_aux.cpu().numpy())
 
+        if self.return_aux:
+            return (
+                np.array(predictions),
+                np.array(actuals),
+                np.array(physical_value),
+                np.array(aux_predictions),
+            )
         return np.array(predictions),np.array(actuals),np.array(physical_value)
 

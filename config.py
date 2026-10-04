@@ -153,6 +153,54 @@ class ModelCanonConfig:
     patience: int = 10
 
 @dataclass
+class ModelPreset:
+    """Unified training preset for both regular and GAN models."""
+    model_name: str
+    use_gan: bool = False
+    input_day_num: int = 3
+    output_day_num: int = 1
+    batch_size: int = 4
+    epochs: int = 10
+    patience: int = 5
+    lr: float = 1e-3
+    # GAN-only fields (ignored by regular models)
+    g_lr: float = 1e-3
+    d_lr: float = 1e-4
+    lambda_tec: float = 1.0
+    lambda_aux: float = 0.1
+    adv_weight: float = 1.0
+    clip_grad: float = 1.0
+
+
+MODEL_PRESETS = {
+    "E_P_D": ModelPreset("E_P_D"),
+    "ED_CGConvLSTM": ModelPreset("ED_CGConvLSTM"),
+    "GA_Predrnn": ModelPreset(
+        "GA_Predrnn",
+        use_gan=True,
+        input_day_num=2,
+        output_day_num=1,
+        batch_size=4,
+        epochs=50,
+        patience=10,
+        g_lr=1e-3,
+        d_lr=1e-4,
+        lambda_tec=1.0,
+        lambda_aux=0.1,
+        adv_weight=1.0,
+        clip_grad=1.0,
+    ),
+    "ED_Autoformer": ModelPreset("ED_Autoformer"),
+    "ModelCanon": ModelPreset("ModelCanon", lr=5e-4, patience=10),
+}
+
+
+def get_train_config(name: str) -> ModelPreset:
+    if name not in MODEL_PRESETS:
+        raise ValueError(f"模型预设不存在: {name}")
+    return MODEL_PRESETS[name]
+
+@dataclass
 class DataAnalysisConfig:
     start_month_analysis = 200501
     end_month_analysis = 200502

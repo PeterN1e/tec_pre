@@ -1,4 +1,3 @@
-import torch
-a = torch.randn(3,3,3)
-b = torch.randn(1,3,3)
-c= (a,b).unsqueeze
+import pyiri
+tec = pyiri.get_tec(2024, 3, 21, 12, 40.0, 116.0, 300.0)
+print(f"TEC: {tec:.2f} TECU")
