@@ -1,9 +1,10 @@
 import torch
 from config import TrainConfig, DatasetConfig
-cfg_train = TrainConfig
-cfg_dataset = DatasetConfig
+cfg_train = TrainConfig()
+cfg_dataset = DatasetConfig()
 
 import os
+from pathlib import Path
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import logging
 import time
@@ -11,6 +12,7 @@ import subprocess
 import numpy as np
 import torch.nn.functional as F
 from tqdm import tqdm
+from core.checkpoint import save_checkpoint
 from common.EvaluationMetrics import evaluate_all
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
@@ -56,6 +58,15 @@ class TrainModel:
                  scheduler=None,
                  save_best=True,
                  patience=5,
+                 model_name=None,
+                 learning_rate=None,
+                 batch_size=None,
+                 input_length=None,
+                 output_length=None,
+                 device=None,
+                 log_path=None,
+                 config=None,
+                 use_amp=None,
                  ):
         super().__init__()
         self.model = model
@@ -64,28 +75,36 @@ class TrainModel:
         self.criterion = criterion
         self.criterion_name = criterion_name
         self.optimizer = optimizer
-        self.batch_size = cfg_train.batch_size
-        self.model_name = cfg_train.model_name
+        self.batch_size = batch_size or cfg_train.batch_size
+        self.model_name = model_name or cfg_train.model_name
         self.epochs_num = cfg_train.epochs_num
         self.patience = patience
-        self.input_length = cfg_train.input_length
-        self.output_length = cfg_train.output_length
+        self.input_length = input_length or cfg_train.input_length
+        self.output_length = output_length or cfg_train.output_length
+        self.learning_rate = (
+            learning_rate if learning_rate is not None else cfg_train.lr
+        )
         self.start_month_train = cfg_dataset.start_month_train
         self.end_month_train = cfg_dataset.end_month_train
         self.start_month_val = cfg_dataset.start_month_val
         self.end_month_val = cfg_dataset.end_month_val
-        self.device = cfg_train.device
+        self.device = device or cfg_train.device
         self.scheduler = scheduler
         self.save_best = save_best
         self.model_save_path = model_save_path
+        self.config = config
         self.best_test_loss = float("inf")
         self.counter = 0
         self.early_stop = False
-        self.use_amp = getattr(cfg_train, "use_amp", False)
-        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        self.use_amp = (
+            getattr(cfg_train, "use_amp", False)
+            if use_amp is None
+            else bool(use_amp)
+        )
+        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
 
         # ---- per-model logger ----
-        log_file = cfg_train.log_path / f"{self.model_name}.log"
+        log_file = Path(log_path or cfg_train.log_path) / f"{self.model_name}.log"
         self.logger = logging.getLogger(f"train.{self.model_name}")
         self.logger.setLevel(logging.INFO)
         self.logger.handlers.clear()
@@ -107,7 +126,7 @@ class TrainModel:
 
         self.logger.info(SEP)
         self.logger.info(f"Model: {self.model_name}")
-        self.logger.info(f"Hyperparameters: batch_size={self.batch_size}, epochs_num={num_epochs}, patience={self.patience}, lr={cfg_train.lr}")
+        self.logger.info(f"Hyperparameters: batch_size={self.batch_size}, epochs_num={num_epochs}, patience={self.patience}, lr={self.learning_rate}")
         self.logger.info(f"Dataset: Train: {self.start_month_train}-{self.end_month_train}, Val: {self.start_month_val}-{self.end_month_val}")
         self.logger.info(f"Parameters: {param_count:,}")
         self.logger.info(f"Loss Function: {self.criterion_name}")
@@ -129,7 +148,7 @@ class TrainModel:
                 batch_exp_tec = batch_exp_tec.float().to(self.device)
                 batch_exp_aux = batch_exp_aux.float().to(self.device)
 
-                with torch.cuda.amp.autocast(enabled=self.use_amp):
+                with torch.amp.autocast("cuda", enabled=self.use_amp):
                     if getattr(self.criterion, "_needs_context", False):
                         loss = self.criterion(batch_in_tec, batch_in_aux, batch_exp_tec)
                     else:
@@ -160,7 +179,7 @@ class TrainModel:
                     batch_in_tec = batch_in_tec.float().to(self.device)
                     batch_in_aux = batch_in_aux.float().to(self.device)
                     batch_exp_tec = batch_exp_tec.float().to(self.device)
-                    with torch.cuda.amp.autocast(enabled=self.use_amp):
+                    with torch.amp.autocast("cuda", enabled=self.use_amp):
                         if getattr(self.criterion, "_needs_context", False):
                             test_loss += self.criterion(batch_in_tec, batch_in_aux, batch_exp_tec).item()
                         else:
@@ -197,7 +216,16 @@ class TrainModel:
                 self.best_test_loss = avg_test_loss
                 self.counter = 0
                 if self.save_best:
-                    torch.save(self.model.state_dict(), self.model_save_path)
+                    save_checkpoint(
+                        self.model_save_path,
+                        model=self.model,
+                        optimizer=self.optimizer,
+                        scheduler=self.scheduler,
+                        scaler=self.scaler,
+                        epoch=epoch,
+                        best_metric=avg_test_loss,
+                        config=self.config,
+                    )
                     self.logger.info(f"Best model saved at epoch {epoch} with val loss {avg_test_loss:.5f}")
             else:
                 self.counter += 1
@@ -288,6 +316,7 @@ def train_gan(
     adv_weight=1.0,
     clip_grad=1.0,
     use_amp=False,
+    amp_dtype="bf16",
     scheduler_g=None,
     scheduler_d=None,
     g_steps=1,
@@ -295,6 +324,8 @@ def train_gan(
     d_loss_fn=None,
     g_adv_loss_fn=None,
     log_path=None,
+    config=None,
+    aux_indices=(2, 3, 4),
 ):
     """Reusable GAN trainer: alternating D/G steps with generator-only validation.
 
@@ -306,7 +337,8 @@ def train_gan(
     d_loss_fn = d_loss_fn or _default_d_loss
     g_adv_loss_fn = g_adv_loss_fn or _default_g_adv_loss
 
-    log_dir = log_path or cfg_train.log_path
+    log_dir = Path(log_path or cfg_train.log_path)
+    log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(f"gan.{model_name}")
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
@@ -331,7 +363,22 @@ def train_gan(
                 f"discriminator={sum(p.numel() for p in discriminator.parameters()):,}, total={total_params:,}")
     logger.info(SEP)
 
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    amp_dtype = (
+        torch.bfloat16
+        if str(amp_dtype).lower() in ("bf16", "bfloat16")
+        else torch.float16
+    )
+    autocast_enabled = bool(use_amp) and device.type == "cuda"
+    # bf16 keeps enough exponent range to skip loss scaling; fp16 still needs it.
+    scaler = torch.amp.GradScaler(
+        "cuda",
+        enabled=autocast_enabled and amp_dtype == torch.float16,
+    )
+    logger.info(
+        f"AMP: enabled={autocast_enabled} "
+        f"dtype={amp_dtype if autocast_enabled else 'fp32'} "
+        f"loss_scaling={scaler.is_enabled()}"
+    )
     start_time = time.time()
 
     for epoch in range(1, epochs + 1):
@@ -348,32 +395,46 @@ def train_gan(
             B, T_out, H, W = batch_exp_tec.shape
             real = batch_exp_tec.reshape(B * T_out, 1, H, W)
 
+            # One generator forward per batch. The discriminator consumes a
+            # detached view of these predictions, so the project no longer
+            # needs the extra no_grad generator pass it used to run here. The
+            # graph stays alive for the generator step below.
+            with torch.autocast("cuda", dtype=amp_dtype, enabled=autocast_enabled):
+                pred_tec, pred_aux = _generator_outputs(
+                    generator, batch_in_tec, batch_in_aux
+                )
+            fake_for_d = pred_tec.detach().reshape(B * T_out, 1, H, W)
+            fake_for_g = pred_tec.reshape(B * T_out, 1, H, W)
+
             # ---- Discriminator steps ----
             for _ in range(d_steps):
-                with torch.no_grad():
-                    pred_tec_d, _ = _generator_outputs(generator, batch_in_tec, batch_in_aux)
-                fake = pred_tec_d.detach().reshape(B * T_out, 1, H, W)
-                score_real = discriminator(real)
-                score_fake = discriminator(fake)
-                loss_d = d_loss_fn(score_real, score_fake)
-                d_optimizer.zero_grad()
+                with torch.autocast("cuda", dtype=amp_dtype, enabled=autocast_enabled):
+                    score_real = discriminator(real)
+                    score_fake = discriminator(fake_for_d)
+                # losses are evaluated in fp32 regardless of the autocast dtype
+                loss_d = d_loss_fn(score_real.float(), score_fake.float())
+                d_optimizer.zero_grad(set_to_none=True)
                 scaler.scale(loss_d).backward()
                 scaler.step(d_optimizer)
                 scaler.update()
 
             # ---- Generator steps ----
-            for _ in range(g_steps):
-                pred_tec, pred_aux = _generator_outputs(generator, batch_in_tec, batch_in_aux)
-                fake = pred_tec.reshape(B * T_out, 1, H, W)
-                score_fake = discriminator(fake)
-                loss_tec = F.l1_loss(pred_tec, batch_exp_tec)
-                loss_adv = g_adv_loss_fn(score_fake)
+            for step_index in range(g_steps):
+                with torch.autocast("cuda", dtype=amp_dtype, enabled=autocast_enabled):
+                    score_fake = discriminator(fake_for_g)
+                loss_tec = F.l1_loss(pred_tec.float(), batch_exp_tec)
+                loss_adv = g_adv_loss_fn(score_fake.float())
                 loss_g = lambda_tec * loss_tec + adv_weight * loss_adv
                 if pred_aux is not None:
-                    loss_aux = F.l1_loss(pred_aux, batch_exp_aux[:, :, [2, 3, 4]])
+                    loss_aux = F.l1_loss(
+                        pred_aux.float(),
+                        batch_exp_aux[:, :, list(aux_indices)],
+                    )
                     loss_g = loss_g + lambda_aux * loss_aux
-                g_optimizer.zero_grad()
-                scaler.scale(loss_g).backward()
+                g_optimizer.zero_grad(set_to_none=True)
+                scaler.scale(loss_g).backward(
+                    retain_graph=step_index < g_steps - 1
+                )
                 scaler.unscale_(g_optimizer)
                 torch.nn.utils.clip_grad_norm_(generator.parameters(), clip_grad)
                 scaler.step(g_optimizer)
@@ -412,7 +473,17 @@ def train_gan(
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             counter = 0
-            torch.save(generator.state_dict(), model_save_path)
+            save_checkpoint(
+                model_save_path,
+                model=generator,
+                optimizer=g_optimizer,
+                scheduler=scheduler_g,
+                scaler=scaler,
+                epoch=epoch,
+                best_metric=val_loss,
+                config=config,
+                extra={"discriminator_state_dict": discriminator.state_dict()},
+            )
             torch.save(discriminator.state_dict(), disc_save_path)
             logger.info(f"Best GAN model saved at epoch {epoch} with val loss {val_loss:.5f}")
         else:

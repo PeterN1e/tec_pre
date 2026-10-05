@@ -28,10 +28,12 @@ class DeltaCriterion:
 
     def __call__(self, tec_in, aux_in, tec_gt):
         delta_pred = self.model.forward_delta(tec_in, aux_in)
-        delta_true = tec_gt - tec_in[:, -12:, :, :]
+        output_length = tec_gt.shape[1]
+        input_baseline = tec_in[:, -output_length:, :, :]
+        delta_true = tec_gt - input_baseline
         delta_loss = self.l1(delta_pred, delta_true)
 
-        recon_pred = tec_in[:, -12:, :, :] + delta_pred
+        recon_pred = input_baseline + delta_pred
         recon_loss = self.l1(recon_pred, tec_gt)
 
         return self.delta_weight * delta_loss + self.recon_weight * recon_loss

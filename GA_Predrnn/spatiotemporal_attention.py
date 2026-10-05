@@ -49,15 +49,18 @@ class HaloAttention(nn.Module):
         bs = self.block_size
         hs = self.halo_size
 
-        # --- pad Q so H, W are divisible by block_size ---
+        # --- pad Q, K, V to the same block grid ---
         pad_h = (bs - H % bs) % bs
         pad_w = (bs - W % bs) % bs
         q = F.pad(q, [0, pad_w, 0, pad_h])          # (B, C, H', W')
+        k = F.pad(k, [0, pad_w, 0, pad_h])
+        v = F.pad(v, [0, pad_w, 0, pad_h])
         _, _, H_p, W_p = q.shape
 
-        # --- pad K, V with halo + same block padding ---
-        k = F.pad(k, [hs, hs + pad_w, hs, hs + pad_h])
-        v = F.pad(v, [hs, hs + pad_w, hs, hs + pad_h])
+        # The halo is added after the block padding so that every Q block
+        # has exactly one corresponding K/V block.
+        k = F.pad(k, [hs, hs, hs, hs])
+        v = F.pad(v, [hs, hs, hs, hs])
 
         num_h = H_p // bs
         num_w = W_p // bs
@@ -69,6 +72,8 @@ class HaloAttention(nn.Module):
         # k: (B, C, num_h, num_w, block_ext, block_ext)
         k = k.unfold(2, block_ext, bs).unfold(3, block_ext, bs)
         v = v.unfold(2, block_ext, bs).unfold(3, block_ext, bs)
+        assert k.shape[2:4] == (num_h, num_w), "HaloAttention K block grid mismatch"
+        assert v.shape[2:4] == (num_h, num_w), "HaloAttention V block grid mismatch"
 
         # reshape for multi-head attention
         # (B, C, nh, nw, bh, bw) -> (B, nh, nw, heads, bh*bw, head_dim)

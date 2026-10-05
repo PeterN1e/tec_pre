@@ -1,0 +1,39 @@
+seed: 42
+device: auto
+output_dir: save
+
+data:
+  data_root: D:/Dataset_tec_NLY
+  tec_subdir: tec_ionex_npy/igsg
+  indices_subdir: indices
+  aux_columns: [kp, ssn, dst, ap, f10.7, ae]
+  height: 71
+  width: 73
+  input_length: 36
+  output_length: 12
+  batch_size: 4
+  num_workers: 0
+  pin_memory: true
+  splits:
+    train: [200901, 201812]
+    val: [201901, 202012]
+    test: [202101, 202412]
+
+training:
+  epochs: 10
+  patience: 5
+  lr: 0.001
+  weight_decay: 0.0
+  use_amp: false
+  grad_clip: 1.0
+  save_best: true
+  loss: l1
+  scheduler:
+    name: reduce_on_plateau
+    factor: 0.5
+    patience: 3
+
+model:
+  name: GA_Predrnn
+  params: {}
+

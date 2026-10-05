@@ -7,15 +7,24 @@ class TecPreTransformer(nn.Module):
     def __init__(self,
                  history_len,
                  predict_len,
-                 in_dim=4104,
+                 in_dim=None,
+                 output_dim=None,
+                 output_channels=12,
+                 spatial_shape=(18, 19),
                  d_model = 512,#模型维度
                  nhead=8,
                  num_encoder_layers=6,
                  dim_feedforward=2048,  #feedforward维度
                  dropout=0.1):
         super( ).__init__()
+        flat_dim = output_channels * spatial_shape[0] * spatial_shape[1]
+        in_dim = in_dim or flat_dim
+        output_dim = output_dim or flat_dim
         self.predict_len = predict_len
+        self.output_dim = output_dim
         self.d_model = d_model
+        self.output_channels = output_channels
+        self.spatial_shape = spatial_shape
         self.input_projection = nn.Linear(in_dim,d_model)
         self.pos_encoder = PositionalEncoding(d_model, dropout=dropout, max_len=history_len+10)
 
@@ -37,7 +46,10 @@ class TecPreTransformer(nn.Module):
                 norm=nn.LayerNorm(d_model),
                 enable_nested_tensor=False
         )
-        self.output_projection = nn.Linear(d_model, 4104)  #映射回所需长度
+        self.output_projection = nn.Linear(
+            d_model,
+            predict_len * output_dim,
+        )
 
     def forward(self,src):
 
@@ -51,7 +63,12 @@ class TecPreTransformer(nn.Module):
         # 5. 输出映射: (batch, 1, d_model) -> (batch , 500)
         #last_step_hidden = last_step_hidden.reshape(batch_size,self.predict_len,-1)
         output = self.output_projection(last_step_hidden)
-        output = output.view(batch_size, self.predict_len, 12,18,19)  # 动态适配predict_len
+        output = output.view(
+            batch_size,
+            self.predict_len,
+            self.output_channels,
+            *self.spatial_shape,
+        )
         return output
 
 

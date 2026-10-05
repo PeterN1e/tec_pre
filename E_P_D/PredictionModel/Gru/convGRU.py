@@ -1,9 +1,7 @@
 import torch.nn as nn
 
-from config import ModelConfig
 import torch
 
-cfg_model = ModelConfig()
 class ConvGRUCell(nn.Module):
     """ConvGRU单元 - 处理2D空间序列"""
 

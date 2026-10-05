@@ -1,0 +1,24 @@
+data:
+  input_length: 36
+  output_length: 12
+  batch_size: 4
+
+model:
+  name: ED_Autoformer
+  params:
+    d_model: 512
+    n_heads: 8
+    d_ff: 2048
+    e_layers: 2
+    d_layers: 1
+    moving_avg: 13
+    factor: 3
+    dropout: 0.05
+    activation: gelu
+    encode_channels: [64, 128, 256, 512]
+
+training:
+  epochs: 10
+  patience: 5
+  lr: 0.001
+

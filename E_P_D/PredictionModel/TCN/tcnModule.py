@@ -91,14 +91,19 @@ class TCNMiddlePredictor(nn.Module):
 
     def __init__(self,
                  predict_len = 1,
-                 input_dim = 4104,
-                 output_dim = 4104,
+                 input_dim = None,
+                 output_dim = None,
                  history_len = 12,
                  num_channels=None,
                  kernel_size = 3,
                  dropout = 0.2,
-                 use_attention = False):
+                 use_attention = False,
+                 output_channels = 12,
+                 spatial_shape = (18, 19)):
         super().__init__()
+        flat_dim = output_channels * spatial_shape[0] * spatial_shape[1]
+        input_dim = input_dim or flat_dim
+        output_dim = output_dim or flat_dim
         if num_channels is None:
             num_channels = [256, 256, 256]
         self.input_dim = input_dim
@@ -106,6 +111,10 @@ class TCNMiddlePredictor(nn.Module):
         self.seq_length = history_len
         self.use_attention = use_attention
         self.predict_len = predict_len
+        self.output_dim = output_dim
+        self.output_channels = output_channels
+        self.spatial_shape = spatial_shape
+        total_output_dim = predict_len * output_dim
         self.tcn = TemporalConvNet(
             num_inputs = input_dim,
             num_channels = num_channels,
@@ -124,8 +133,8 @@ class TCNMiddlePredictor(nn.Module):
         else:
             agg_dim = tcn_output_dim
 
-        hidden_dim1 = (tcn_output_dim + output_dim)//2
-        hidden_dim2 = (hidden_dim1 + output_dim)//2
+        hidden_dim1 = (tcn_output_dim + total_output_dim)//2
+        hidden_dim2 = (hidden_dim1 + total_output_dim)//2
 
         self.projection = nn.Sequential(
             # ----- 第一层：TCN输出 -> 中间维度1 -----
@@ -141,15 +150,15 @@ class TCNMiddlePredictor(nn.Module):
             nn.Dropout(dropout),  # 正则化
 
             # ----- 输出层：映射到目标维度 -----
-            nn.Linear(hidden_dim2, output_dim)  # 3142 -> 4104
+            nn.Linear(hidden_dim2, total_output_dim)
             # 注意：输出层不加激活函数，因为是回归任务（预测连续值）
             # 也不加LayerNorm，让解码器接收原始尺度的特征
         )
         # ==================== 残差连接 ====================
         # 如果TCN输出维度和目标维度差异大，可以用1x1线性投影做残差
         # 这里256->4104维度变化大，投影残差可能帮助梯度流动
-        self.skip_connection = nn.Linear(tcn_output_dim, output_dim) \
-            if tcn_output_dim != output_dim else None
+        self.skip_connection = nn.Linear(tcn_output_dim, total_output_dim) \
+            if tcn_output_dim != total_output_dim else None
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -173,7 +182,12 @@ class TCNMiddlePredictor(nn.Module):
         if self.skip_connection is not None:
             residual = self.skip_connection(context)
             out = out + residual
-        output = out.view(batch_size,self.predict_len, 12, 18, 19 )
+        output = out.view(
+            batch_size,
+            self.predict_len,
+            self.output_channels,
+            *self.spatial_shape,
+        )
 
         return output
 
@@ -181,5 +195,5 @@ class TCNMiddlePredictor(nn.Module):
 
 if __name__ == '__main__':
     a = torch.randn(24, 12, 4104)
-    b = TCNMiddlePredictor(input_dim=4104, output_dim=4104,predict_len =12, history_len=36)
+    b = TCNMiddlePredictor(input_dim=4104, output_dim=4104, predict_len=12, history_len=36)
     print(b(a).shape)

@@ -1,5 +1,12 @@
 import numpy as np
 
+
+def _require_dims(data, allowed):
+    if data.ndim not in allowed:
+        raise ValueError(
+            f"Expected array with dimensions {allowed}, got shape {data.shape}"
+        )
+
 def scale_tec_aux_data(data, scaler, fit_scaler=True):
     """
     将tec数据进行降维 步骤：reshape → 缩放 → 恢复形状
@@ -8,27 +15,23 @@ def scale_tec_aux_data(data, scaler, fit_scaler=True):
     :param fit_scaler: True则fit_transform（训练集），False则transform（测试集）
     :return:
     """
-    dim = data.ndim
-    if dim == 3:
-        num, w, h = data.shape
-        data_2d = data.reshape(num, 5183)
+    _require_dims(data, {2, 3})
+    if data.ndim == 3:
+        num = data.shape[0]
+        data_2d = data.reshape(num, -1)
         if fit_scaler:
             scaled = scaler.fit_transform(data_2d)
         else:
             scaled = scaler.transform(data_2d)
-        return scaled.reshape(num, w, h)
-    elif dim == 2:#标准化二维特征数据
-        #data_2d = data[:,1:]
+        return scaled.reshape(data.shape)
+    if data.ndim == 2:
         data_2d = data
         if fit_scaler:
             scaled = scaler.fit_transform(data_2d)
         else:
             scaled = scaler.transform(data_2d)
-        #return np.concatenate((data[:,0].reshape(-1,1),scaled),axis = 1)
         return scaled
-    else:
-        print("输入维度错误，检查")
-        exit()
+    raise AssertionError("unreachable")
 
 def inverse_transform_predictions(data,scaler):
     """
@@ -42,14 +45,24 @@ def inverse_transform_predictions(data,scaler):
     data_inv = []
     #act_inv = []#创建的是列表
     dim = len(data.shape)
-    if dim == 5:#说明传入的数据是 标准化后的tec图
-        original_shape = data.shape
-        data_2d = data.reshape(-1,5183)#将数据转化为一行  5183 = 71*73
-        data_inv=scaler.inverse_transform(data_2d).reshape(original_shape)
-    elif dim == 4:#说明传入的数据是 特征参数
-        original_shape = data.shape
-        data_2d = data.reshape(-1,original_shape[-1])
-        data_inv = scaler.inverse_transform(data_2d).reshape(original_shape)
+    if dim not in {3, 4, 5}:
+        raise ValueError(f"Expected a 3D, 4D or 5D array, got shape {data.shape}")
+    original_shape = data.shape
+    n_features = getattr(scaler, "n_features_in_", None)
+    if dim == 3:
+        feature_dim = original_shape[-1]
+        data_2d = data.reshape(-1, feature_dim)
+        return scaler.inverse_transform(data_2d).reshape(original_shape)
+    spatial_features = original_shape[-2] * original_shape[-1]
+    if dim == 5 or (n_features == spatial_features and n_features != original_shape[-1]):
+        feature_dim = spatial_features
+    elif n_features == original_shape[-1]:
+        feature_dim = original_shape[-1]
     else:
-        print("反标准化时参数维度传入错误")
+        raise ValueError(
+            "Cannot infer inverse-transform layout for "
+            f"shape {original_shape} and scaler with {n_features} features"
+        )
+    data_2d = data.reshape(-1, feature_dim)
+    data_inv = scaler.inverse_transform(data_2d).reshape(original_shape)
     return data_inv

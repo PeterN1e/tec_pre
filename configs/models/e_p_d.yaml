@@ -1,0 +1,16 @@
+data:
+  input_length: 36
+  output_length: 12
+  batch_size: 4
+
+model:
+  name: E_P_D
+  params:
+    predictor: convlstm
+    transmit_parameter: 3
+
+training:
+  epochs: 10
+  patience: 5
+  lr: 0.001
+

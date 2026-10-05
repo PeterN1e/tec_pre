@@ -57,6 +57,7 @@ class GAPredrnnPredictor(nn.Module):
         block_size: int = 8,
         halo_size: int = 2,
         num_heads: int = 4,
+        aux_indices=(2, 3, 4),
     ):
         super().__init__()
         self.input_dim = input_dim
@@ -64,6 +65,7 @@ class GAPredrnnPredictor(nn.Module):
         self.num_layers = num_layers
         self.input_length = input_length
         self.output_length = output_length
+        self.aux_indices = tuple(aux_indices)
 
         # --- encoder ST-LSTM stack ---
         self.encoder_cells = nn.ModuleList()
@@ -173,15 +175,14 @@ class GAPredrnnPredictor(nn.Module):
     # ------------------------------------------------------------------ #
     #  build 4-channel fused input from dataset tensors
     # ------------------------------------------------------------------ #
-    @staticmethod
-    def _fuse_input(tec, aux):
+    def _fuse_input(self, tec, aux):
         """
         tec : (B, T, H, W)
         aux : (B, T, 6)        columns [2,3,4] = dst, ap, f10.7
         returns: (B, T, 4, H, W)
         """
         # take dst, ap, f10.7 and broadcast to spatial grid
-        aux3 = aux[:, :, [2, 3, 4]]                                     # (B, T, 3)
+        aux3 = aux[:, :, list(self.aux_indices)]                        # (B, T, 3)
         H, W = tec.shape[2], tec.shape[3]
         aux_spatial = aux3.unsqueeze(-1).unsqueeze(-1)                   # (B, T, 3, 1, 1)
         aux_spatial = aux_spatial.expand(-1, -1, -1, H, W)              # (B, T, 3, H, W)

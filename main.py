@@ -17,6 +17,7 @@ from common.Data_Preprocessing import inverse_transform_predictions
 import os
 import matplotlib.pyplot as plt
 from common.EvaluationMetrics import print_evaluation, log_evaluation
+from core.checkpoint import load_checkpoint
 
 cfg_dataset = DatasetConfig()
 cfg_train = TrainConfig()
@@ -68,7 +69,7 @@ def main():
     )
 
     train_dataloader = DataLoader(train_dataset,batch_size=preset.batch_size, shuffle=True,drop_last = True)
-    val_dataloader = DataLoader(val_dataset,batch_size=preset.batch_size, shuffle=False, drop_last = True)
+    val_dataloader = DataLoader(val_dataset,batch_size=preset.batch_size, shuffle=False, drop_last=False)
 
     print("训练数据集总步长：", train_dataset.__len__())
     print("测试数据集总步长：", val_dataset.__len__())
@@ -138,8 +139,8 @@ def main():
         train_losses, test_losses = tec_train.train(preset.epochs)
 
 #############保存和标准化映射关系
-    joblib.dump(tec_scaler, os.path.join(cfg_train.model_path,"tec_scaler.pkl"))
-    joblib.dump(aux_scaler, os.path.join(cfg_train.model_path,"aux_scaler.pkl"))
+    joblib.dump(tec_scaler, os.path.join(model_dir, "tec_scaler.pkl"))
+    joblib.dump(aux_scaler, os.path.join(model_dir, "aux_scaler.pkl"))
 
     print("模型训练结束")
 
@@ -167,10 +168,23 @@ def main():
     plt.savefig(file_path)
     plt.show()
 
-def model_predict_only():
+def _load_state_dict(path, device):
+    return load_checkpoint(path, map_location=device)["model_state_dict"]
 
-    tec_scaler = joblib.load(os.path.join(cfg_train.model_path , "tec_scaler.pkl"))
-    aux_scaler = joblib.load(os.path.join(cfg_train.model_path, "aux_scaler.pkl"))
+
+def _resolve_artifact_dir(model_name):
+    model_dir = os.path.join(cfg_train.model_path, model_name)
+    if os.path.isdir(model_dir):
+        return model_dir
+    return cfg_train.model_path
+
+
+def model_predict_only(preset=None, model=None, interactive=True):
+    preset = preset or get_train_config(cfg_train.model_name)
+    artifact_dir = _resolve_artifact_dir(cfg_train.model_name)
+
+    tec_scaler = joblib.load(os.path.join(artifact_dir, "tec_scaler.pkl"))
+    aux_scaler = joblib.load(os.path.join(artifact_dir, "aux_scaler.pkl"))
 
     test_dataset = TecIonosphereDataset(
         tec_dir=cfg_dataset.tec_dir,
@@ -181,11 +195,16 @@ def model_predict_only():
         tec_scaler = tec_scaler,
         aux_scaler = aux_scaler
     )
-    test_dataloader = DataLoader(test_dataset, batch_size=preset.batch_size, shuffle=False, drop_last=True)
-    model =ModelAll()
+    test_dataloader = DataLoader(test_dataset, batch_size=preset.batch_size, shuffle=False, drop_last=False)
+    if model is None:
+        model = ModelAll()
     model = model.to(cfg_train.device)
-    save_dir = cfg_train.model_name
-    model.load_state_dict(torch.load(os.path.join(r"save/model_dict",save_dir, "model_state_dict.pth"), map_location=cfg_train.device,weights_only=True))
+    model.load_state_dict(
+        _load_state_dict(
+            os.path.join(artifact_dir, "model_state_dict.pth"),
+            cfg_train.device,
+        )
+    )
 
     tec_predict = TecPredict(model,test_dataloader)
 
@@ -224,25 +243,27 @@ def model_predict_only():
     # delta用于图片展示
     delta_4d = act_4d - pre_4d
 
-    for i in range(10): #允许检索10次
-        retrival = int(input(f"输入检索值0~{pre_4d.shape[0]}："))
-        if 0<=retrival<pre_4d.shape[0]:
-            pic_show(act_4d[retrival,:,:,:], pre_4d[retrival,:,:,:], aux_3d[retrival,:,:],delta_4d[retrival,:,:,:])
-            print("完成绘制")
-        else:
-            print("输入错误")
-            break
+    if interactive:
+        for i in range(10): #允许检索10次
+            retrival = int(input(f"输入检索值0~{pre_4d.shape[0]}："))
+            if 0<=retrival<pre_4d.shape[0]:
+                pic_show(act_4d[retrival,:,:,:], pre_4d[retrival,:,:,:], aux_3d[retrival,:,:],delta_4d[retrival,:,:,:])
+                print("完成绘制")
+            else:
+                print("输入错误")
+                break
 
 if __name__ == "__main__":
+    preset = get_train_config(cfg_train.model_name)
     a = input("训练后推理模式输入0，单推理模式输入1：")
     if a=="0":
         print("开始进行训练")
         main()
-        model_predict_only()
+        model_predict_only(preset=preset)
         exit()
     elif a=="1":
         print("开始进行推理")
-        model_predict_only()
+        model_predict_only(preset=preset)
 
     else:
         print("输入错误")

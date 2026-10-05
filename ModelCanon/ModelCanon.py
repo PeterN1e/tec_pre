@@ -111,7 +111,7 @@ class ModelCanon(nn.Module):
     def forward(self, tec, aux):
         """Reconstruct day 4 as day 3 same-hour baseline + predicted delta."""
         delta = self.forward_delta(tec, aux)
-        return tec[:, -12:, :, :] + delta
+        return tec[:, -self.output_length:, :, :] + delta
 
 
 if __name__ == "__main__":

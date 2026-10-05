@@ -7,7 +7,7 @@ class ConvLSTMCell(nn.Module):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels =  input_dim+hidden_dim,
-            out_channels = 4*input_dim,
+            out_channels = 4*hidden_dim,
             kernel_size=3,
             padding=1)
     def forward(self,x,h_prev,c_prev):
@@ -29,18 +29,27 @@ class ConvLSTM(nn.Module):
     def __init__(self,history_len , in_channels=12,hidden_channels = 12,predict_len=12):
         super().__init__()
         self.predict_len = predict_len
+        self.in_channels = in_channels
+        self.hidden_channels = hidden_channels
         self.conv_lstm_cell = ConvLSTMCell(input_dim=in_channels,hidden_dim=hidden_channels)
+        self.decode_proj = (
+            nn.Conv2d(hidden_channels, in_channels, kernel_size=1)
+            if hidden_channels != in_channels
+            else None
+        )
     def forward(self,x):
         batch, history_len, _, h, w = x.shape
-        hidden = torch.zeros(batch, 12, h, w, device=x.device)
-        cell = torch.zeros(batch, 12, h, w, device=x.device)
+        hidden = torch.zeros(batch, self.conv_lstm_cell.conv.out_channels // 4,
+                             h, w, device=x.device)
+        cell = torch.zeros_like(hidden)
 
         for i in range(history_len):
             hidden,cell = self.conv_lstm_cell(x[:,i],hidden,cell)
 
         outputs = []
         for _ in range(self.predict_len):
-            hidden,cell = self.conv_lstm_cell(hidden,hidden,cell)
+            dec_input = hidden if self.decode_proj is None else self.decode_proj(hidden)
+            hidden,cell = self.conv_lstm_cell(dec_input,hidden,cell)
             outputs.append(hidden.unsqueeze(1))
 
         outputs = torch.cat(outputs, dim=1)

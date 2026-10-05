@@ -53,14 +53,12 @@ class CnnDecoder(nn.Module):
             x = self.tec_decoder(x)  # (B, 1, h, w)
             x = x.squeeze(1)
         elif x.dim() == 5:
+            decoded = []
             for i in range(x.size(1)):  # (B, pred, channels, h, w)
                 x_cell = x[:, i, :]
                 x_cell = self.tec_decoder(x_cell)  # 每个时间步单独过CoordGate
-                if x_pred is not None:
-                    x_pred = torch.cat([x_pred, x_cell], dim=1)
-                else:
-                    x_pred = x_cell
-            x = x_pred.squeeze(1)
+                decoded.append(x_cell[:, 0])
+            x = torch.stack(decoded, dim=1)
         else:
             print("解码器输入维度错误")
         return x

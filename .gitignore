@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.pth
+*.pt
+*.ckpt
+.idea/
+.vscode/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+save/
+experiments/
+

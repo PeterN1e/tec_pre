@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional, Tuple, Dict, List
-from scipy.ndimage import convolve as _scipy_convolve
+from scipy.ndimage import convolve1d as _scipy_convolve1d
 
 
 # ============================================================
@@ -24,24 +24,46 @@ def r2_score(pred, target):
 # ============================================================
 
 def _gaussian_kernel_2d(kernel_size=11, sigma=1.5):
+    return np.outer(_gaussian_kernel_1d(kernel_size, sigma),
+                    _gaussian_kernel_1d(kernel_size, sigma))
+
+
+def _gaussian_kernel_1d(kernel_size=11, sigma=1.5):
     coords = np.arange(kernel_size, dtype=np.float32) - kernel_size // 2
     g = np.exp(-(coords ** 2) / (2 * sigma ** 2))
     g = g / g.sum()
-    kernel = np.outer(g, g)
-    return kernel
+    return g.astype(np.float32)
+
+
+def _as_1d_kernel(kernel):
+    """Return the 1-D factor of a rank-1 (separable) 2-D kernel."""
+    kernel = np.asarray(kernel, dtype=np.float32)
+    if kernel.ndim == 1:
+        return kernel
+    if kernel.ndim != 2:
+        raise ValueError("kernel must be 1-D or 2-D")
+    # kernel == outer(g, g)  =>  kernel[:, 0] / sqrt(kernel[0, 0]) == g
+    return (kernel[:, 0] / np.sqrt(kernel[0, 0])).astype(np.float32)
 
 
 def _convolve_2d(img, kernel, padding=0):
-    if img.ndim == 2:
-        img = img[None, None, :, :]
-    elif img.ndim == 3:
-        img = img[None, :, :, :]
-    B, C, H, W = img.shape
-    output = np.zeros_like(img, dtype=np.float32)
-    for b in range(B):
-        for c in range(C):
-            output[b, c] = _scipy_convolve(img[b, c], kernel, mode='constant', cval=0.0)
-    return output.squeeze() if output.shape[0] == 1 and output.shape[1] == 1 else output
+    """Gaussian smoothing, applied separably.
+
+    The Gaussian window is an exact outer product, so convolving along the
+    rows and then along the columns with the 1-D factor gives the same result
+    as a single 2-D pass while doing ``2k`` instead of ``k*k`` multiply-adds
+    per pixel. For the 11x11 window used by SSIM that is roughly a 10x
+    speedup, which matters because evaluation smooths every validation frame.
+
+    ``kernel`` may be either the 2-D window or its 1-D factor.
+    Zero padding outside the image is expressed by ``mode="constant"``, which
+    matches the previous ``cval=0.0`` behaviour.
+    """
+    del padding  # boundary handling comes from mode="constant"
+    arr = np.asarray(img, dtype=np.float32)
+    g = _as_1d_kernel(kernel)
+    smoothed = _scipy_convolve1d(arr, g, axis=-2, mode="constant", cval=0.0)
+    return _scipy_convolve1d(smoothed, g, axis=-1, mode="constant", cval=0.0)
 
 
 def ssim_single_frame(img1, img2, window_size=11, sigma=1.5, data_range=None):
@@ -72,12 +94,12 @@ def ssim_single_frame(img1, img2, window_size=11, sigma=1.5, data_range=None):
 
 def ssim_over_sequence(pred, target, window_size=11, sigma=1.5):
     B, T, H, W = pred.shape
-    ssim_vals = []
-    for t in range(T):
-        frame_pred = pred[:, t, :, :]
-        frame_target = target[:, t, :, :]
-        ssim_vals.append(ssim_single_frame(frame_pred, frame_target, window_size, sigma))
-    return np.mean(ssim_vals)
+    return ssim_single_frame(
+        pred.reshape(B * T, H, W),
+        target.reshape(B * T, H, W),
+        window_size,
+        sigma,
+    )
 
 
 # ============================================================
@@ -91,6 +113,41 @@ def evaluate_all(pred, target, ssim_window=11, ssim_sigma=1.5):
         "R2": r2_score(pred, target),
         "SSIM": ssim_over_sequence(pred, target, ssim_window, ssim_sigma),
     }
+    return results
+
+
+def skill_score(pred, target, baseline):
+    """Murphy skill score against a reference forecast."""
+    baseline_mse = np.mean((baseline - target) ** 2)
+    model_mse = np.mean((pred - target) ** 2)
+    if baseline_mse <= 1e-12:
+        return float("nan")
+    return float(1.0 - model_mse / baseline_mse)
+
+
+def evaluate_with_baseline(pred, target, baseline, ssim_window=11, ssim_sigma=1.5):
+    results = evaluate_all(pred, target, ssim_window, ssim_sigma)
+    results["SkillScore"] = skill_score(pred, target, baseline)
+    results["BaselineRMSE"] = rmse(baseline, target)
+    return results
+
+
+def evaluate_by_latitude_band(pred, target, bands=6):
+    """Report aggregate errors by equal-height latitude bands."""
+    if pred.shape != target.shape:
+        raise ValueError("pred and target must have the same shape")
+    height = pred.shape[-2]
+    bands = max(1, min(int(bands), height))
+    indices = np.array_split(np.arange(height), bands)
+    results = {}
+    for band_index, rows in enumerate(indices, start=1):
+        pred_band = pred[..., rows, :]
+        target_band = target[..., rows, :]
+        results[f"lat_band_{band_index}"] = {
+            "RMSE": rmse(pred_band, target_band),
+            "MAE": mae(pred_band, target_band),
+            "R2": r2_score(pred_band, target_band),
+        }
     return results
 
 
