@@ -128,7 +128,15 @@ def build_loaders(
 def _build_criterion(model: nn.Module, config: Dict[str, Any]):
     model_name = config["model"]["name"]
     if model_name == "ModelCanon":
-        return DeltaCriterion(model.model), "DeltaCriterion"
+        lw = config.get("training", {}).get("loss_weights", {})
+        return DeltaCriterion(
+            model.model,
+            delta_weight=float(lw.get("delta", 1.0)),
+            recon_weight=float(lw.get("recon", 0.3)),
+            fourier_weight=float(lw.get("fourier", 0.2)),
+            ssim_weight=float(lw.get("ssim", 0.1)),
+            temporal_weight=float(lw.get("temporal", 0.05)),
+        ), "DeltaCriterion"
     loss_name = config.get("training", {}).get("loss", "l1").lower()
     losses = {
         "l1": nn.L1Loss,
