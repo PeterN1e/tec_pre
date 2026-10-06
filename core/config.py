@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 import os
+import platform
+import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
@@ -68,6 +70,15 @@ def model_slug(model_name: str) -> str:
     return model_name.strip().lower().replace("-", "_")
 
 
+def _normalize_data_root(config: Dict[str, Any]) -> None:
+    """Auto-convert Windows drive paths to WSL mount points on Linux."""
+    data_root = config.get("data", {}).get("data_root", "")
+    if platform.system() == "Linux" and re.match(r"^[A-Za-z]:[/\\]", str(data_root)):
+        drive = str(data_root)[0].lower()
+        rest = re.sub(r"^[A-Za-z]:[/\\]*", "", str(data_root))
+        config["data"]["data_root"] = f"/mnt/{drive}/{rest}"
+
+
 def load_config(
     model_name: Optional[str] = None,
     config_path: Optional[str | Path] = None,
@@ -94,6 +105,8 @@ def load_config(
     data_root = os.getenv("TEC_DATA_ROOT")
     if data_root:
         config.setdefault("data", {})["data_root"] = data_root
+
+    _normalize_data_root(config)
 
     return apply_overrides(config, overrides)
 
