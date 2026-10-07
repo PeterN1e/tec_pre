@@ -1,0 +1,22 @@
+data:
+  input_length: 36
+  output_length: 12
+  batch_size: 4
+
+model:
+  name: ED_CGConvLSTM
+  params:
+    input_dim: 1
+    output_dim: 1
+    hidden_dim: 60
+    num_layers: 4
+    kernel_size: 3
+    # Memory/perf switches, not capacity: recompute cell activations during the
+    # backward pass, and compile the forward path.
+    use_checkpoint: false
+    use_torch_compile: false
+
+training:
+  epochs: 10
+  patience: 5
+  lr: 0.001
