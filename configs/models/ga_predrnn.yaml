@@ -7,15 +7,14 @@ data:
 model:
   name: GA_Predrnn
   params:
-    input_dim: 4
     hidden_dim: 64
     num_layers: 3
     kernel_size: 5
-    output_length: 12
-    aux_output_dim: 3
     block_size: 8
     halo_size: 2
     num_heads: 4
+    # The aux head predicts exactly these aux_columns, so its width is derived
+    # from this list rather than configured separately.
     aux_indices: [2, 3, 4]
 
 training:

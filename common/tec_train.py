@@ -1,7 +1,4 @@
 import torch
-from config import TrainConfig, DatasetConfig
-cfg_train = TrainConfig()
-cfg_dataset = DatasetConfig()
 
 import os
 import sys
@@ -22,6 +19,14 @@ if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
 
 SEP = "=" * 80
+
+
+def _split_label(config, split):
+    """Render a data.splits range the way the log line reads it."""
+    value = config["data"]["splits"][split]
+    if isinstance(value, int):
+        return f"{value}"
+    return f"{value[0]}-{value[1]}"
 
 
 def _get_gpu_info():
@@ -56,18 +61,16 @@ class TrainModel:
                  criterion_name,
                  optimizer,
                  model_save_path,
-                 scheduler=None,
-                 save_best=True,
-                 patience=5,
-                 model_name=None,
-                 learning_rate=None,
-                 batch_size=None,
-                 input_length=None,
-                 output_length=None,
-                 device=None,
-                 log_path=None,
-                 config=None,
-                 use_amp=None,
+                 scheduler,
+                 save_best,
+                 patience,
+                 model_name,
+                 learning_rate,
+                 batch_size,
+                 device,
+                 log_path,
+                 config,
+                 use_amp,
                  ):
         super().__init__()
         self.model = model
@@ -76,20 +79,11 @@ class TrainModel:
         self.criterion = criterion
         self.criterion_name = criterion_name
         self.optimizer = optimizer
-        self.batch_size = batch_size or cfg_train.batch_size
-        self.model_name = model_name or cfg_train.model_name
-        self.epochs_num = cfg_train.epochs_num
+        self.batch_size = batch_size
+        self.model_name = model_name
         self.patience = patience
-        self.input_length = input_length or cfg_train.input_length
-        self.output_length = output_length or cfg_train.output_length
-        self.learning_rate = (
-            learning_rate if learning_rate is not None else cfg_train.lr
-        )
-        self.start_month_train = cfg_dataset.start_month_train
-        self.end_month_train = cfg_dataset.end_month_train
-        self.start_month_val = cfg_dataset.start_month_val
-        self.end_month_val = cfg_dataset.end_month_val
-        self.device = device or cfg_train.device
+        self.learning_rate = learning_rate
+        self.device = device
         self.scheduler = scheduler
         self.save_best = save_best
         self.model_save_path = model_save_path
@@ -97,15 +91,11 @@ class TrainModel:
         self.best_test_loss = float("inf")
         self.counter = 0
         self.early_stop = False
-        self.use_amp = (
-            getattr(cfg_train, "use_amp", False)
-            if use_amp is None
-            else bool(use_amp)
-        )
+        self.use_amp = bool(use_amp)
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
 
         # ---- per-model logger ----
-        log_file = Path(log_path or cfg_train.log_path) / f"{self.model_name}.log"
+        log_file = Path(log_path) / f"{self.model_name}.log"
         self.logger = logging.getLogger(f"train.{self.model_name}")
         self.logger.setLevel(logging.INFO)
         self.logger.handlers.clear()
@@ -128,7 +118,7 @@ class TrainModel:
         self.logger.info(SEP)
         self.logger.info(f"Model: {self.model_name}")
         self.logger.info(f"Hyperparameters: batch_size={self.batch_size}, epochs_num={num_epochs}, patience={self.patience}, lr={self.learning_rate}")
-        self.logger.info(f"Dataset: Train: {self.start_month_train}-{self.end_month_train}, Val: {self.start_month_val}-{self.end_month_val}")
+        self.logger.info(f"Dataset: {_split_label(self.config, 'train')} train, {_split_label(self.config, 'val')} val")
         self.logger.info(f"Parameters: {param_count:,}")
         self.logger.info(f"Loss Function: {self.criterion_name}")
         self.logger.info(SEP)
@@ -322,21 +312,21 @@ def train_gan(
     device,
     epochs,
     patience,
-    lambda_tec=1.0,
-    lambda_aux=0.1,
-    adv_weight=1.0,
-    clip_grad=1.0,
-    use_amp=False,
-    amp_dtype="bf16",
+    lambda_tec,
+    lambda_aux,
+    adv_weight,
+    clip_grad,
+    use_amp,
+    amp_dtype,
+    log_path,
+    config,
+    aux_indices,
     scheduler_g=None,
     scheduler_d=None,
     g_steps=1,
     d_steps=1,
     d_loss_fn=None,
     g_adv_loss_fn=None,
-    log_path=None,
-    config=None,
-    aux_indices=(2, 3, 4),
 ):
     """Reusable GAN trainer: alternating D/G steps with generator-only validation.
 
@@ -348,7 +338,7 @@ def train_gan(
     d_loss_fn = d_loss_fn or _default_d_loss
     g_adv_loss_fn = g_adv_loss_fn or _default_g_adv_loss
 
-    log_dir = Path(log_path or cfg_train.log_path)
+    log_dir = Path(log_path)
     log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(f"gan.{model_name}")
     logger.setLevel(logging.INFO)

@@ -122,7 +122,7 @@ def resolve_data_paths(config: Dict[str, Any]) -> Dict[str, str]:
 
 
 def resolve_output_dir(config: Dict[str, Any]) -> Path:
-    output_dir = Path(config.get("output_dir", "save")).expanduser()
+    output_dir = Path(config["output_dir"]).expanduser()
     if not output_dir.is_absolute():
         output_dir = PROJECT_ROOT / output_dir
     return output_dir

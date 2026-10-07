@@ -20,6 +20,7 @@ from core.evaluation import (
     evaluate_arrays,
     load_predictions,
     run_inference,
+    save_metrics,
 )
 from core.registry import build_model
 from core.trainer import resolve_device, seed_everything
@@ -64,13 +65,13 @@ def build_split_loader(
         aux_scaler=aux_scaler,
         aux_columns=data_cfg["aux_columns"],
     )
-    pin_memory = bool(data_cfg.get("pin_memory", False)) and device.type == "cuda"
+    pin_memory = bool(data_cfg["pin_memory"]) and device.type == "cuda"
     return DataLoader(
         dataset,
         batch_size=int(data_cfg["batch_size"]),
         shuffle=False,
         drop_last=False,
-        num_workers=int(data_cfg.get("num_workers", 0)),
+        num_workers=int(data_cfg["num_workers"]),
         pin_memory=pin_memory,
     )
 
@@ -121,8 +122,8 @@ def predict_split(
     checkpoint: Optional[str | Path] = None,
     sample_chunk: int = 256,
 ) -> Dict[str, Any]:
-    seed_everything(int(config.get("seed", 42)))
-    device = resolve_device(config.get("device", "auto"))
+    seed_everything(int(config["seed"]))
+    device = resolve_device(config["device"])
     model_dir = model_directory(config)
     tec_scaler, aux_scaler = load_scalers(model_dir)
     model = build_model(config).to(device)
@@ -173,11 +174,13 @@ def predict_split(
         arrays["persistence"],
         sample_chunk=sample_chunk,
     )
+    metrics_path = save_metrics(metrics, output_dir / "metrics.json")
 
     return {
         "model_dir": str(model_dir),
         "split": split,
         "metrics": metrics,
         "predictions_path": str(output_dir),
+        "metrics_path": str(metrics_path),
         "arrays": arrays,
     }

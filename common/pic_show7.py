@@ -1,7 +1,5 @@
 import matplotlib.pyplot as plt
 
-from config import TrainConfig
-cfg_train = TrainConfig()
 plt.rcParams['font.sans-serif'] = [
     'SimHei',  # Windows 黑体
     'WenQuanYi Micro Hei',  # Linux 文泉驿
@@ -15,13 +13,13 @@ from matplotlib.gridspec import GridSpec
 import os
 
 
-def pic_show(act, pre, aux, delta):
+def pic_show(act, pre, aux, delta, save_dir=None):
     """
     :param delta: (num,71,73)
     :param aux: (num, ...)
     :param pre: (num,71,73)
     :param act: (num,71,73)
-    :return: 保存并显示图片
+    :param save_dir: 给出时把图保存到该目录，否则只显示
     """
     lat = np.arange(87.5, -90, -2.5)
     lon = np.arange(-180, 185, 5)
@@ -85,9 +83,10 @@ def pic_show(act, pre, aux, delta):
     fig.colorbar(im3, cax=cbar_ax3, label='TECU')
 
     # 保存图片（移到循环外，避免覆盖）
-    os.makedirs(cfg_train.pic_path, exist_ok=True)
-    file_path = os.path.join(cfg_train.pic_path, 'r-p-d.png')
-    plt.savefig(file_path, bbox_inches='tight', dpi=150)
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        file_path = os.path.join(save_dir, 'r-p-d.png')
+        plt.savefig(file_path, bbox_inches='tight', dpi=150)
     plt.show()
 
 def datagram(data,label=None):

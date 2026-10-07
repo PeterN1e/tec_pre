@@ -93,12 +93,13 @@ def build_loaders(
 ) -> Tuple[DataLoader, DataLoader, Optional[DataLoader], Any, Any]:
     train_ds, val_ds, test_ds, tec_scaler, aux_scaler = build_datasets(config)
     data_cfg = config["data"]
-    pin_memory = bool(data_cfg.get("pin_memory", False)) and device.type == "cuda"
+    pin_memory = bool(data_cfg["pin_memory"]) and device.type == "cuda"
+    num_workers = int(data_cfg["num_workers"])
     loader_kwargs = {
         "batch_size": int(data_cfg["batch_size"]),
-        "num_workers": int(data_cfg.get("num_workers", 0)),
+        "num_workers": num_workers,
         "pin_memory": pin_memory,
-        "persistent_workers": bool(data_cfg.get("num_workers", 0)),
+        "persistent_workers": bool(num_workers),
     }
     train_loader = DataLoader(
         train_ds,
@@ -128,16 +129,16 @@ def build_loaders(
 def _build_criterion(model: nn.Module, config: Dict[str, Any]):
     model_name = config["model"]["name"]
     if model_name == "ModelCanon":
-        lw = config.get("training", {}).get("loss_weights", {})
+        lw = config["training"]["loss_weights"]
         return DeltaCriterion(
             model.model,
-            delta_weight=float(lw.get("delta", 1.0)),
-            recon_weight=float(lw.get("recon", 0.0)),
-            fourier_weight=float(lw.get("fourier", 0.0)),
-            ssim_weight=float(lw.get("ssim", 0.0)),
-            temporal_weight=float(lw.get("temporal", 0.0)),
+            delta_weight=float(lw["delta"]),
+            recon_weight=float(lw["recon"]),
+            fourier_weight=float(lw["fourier"]),
+            ssim_weight=float(lw["ssim"]),
+            temporal_weight=float(lw["temporal"]),
         ), "DeltaCriterion"
-    loss_name = config.get("training", {}).get("loss", "l1").lower()
+    loss_name = config["training"]["loss"].lower()
     losses = {
         "l1": nn.L1Loss,
         "mse": nn.MSELoss,
@@ -154,25 +155,23 @@ def _build_optimizer(
     learning_rate: Optional[float] = None,
 ):
     training_cfg = config["training"]
-    lr = learning_rate
-    if lr is None:
-        lr = float(training_cfg.get("lr", 1e-3))
+    lr = training_cfg["lr"] if learning_rate is None else learning_rate
     return optim.Adam(
         model.parameters(),
-        lr=lr,
-        weight_decay=float(training_cfg.get("weight_decay", 0.0)),
+        lr=float(lr),
+        weight_decay=float(training_cfg["weight_decay"]),
     )
 
 
 def _build_scheduler(optimizer: optim.Optimizer, config: Dict[str, Any]):
-    scheduler_cfg = config.get("training", {}).get("scheduler") or {}
-    if scheduler_cfg.get("name") != "reduce_on_plateau":
+    scheduler_cfg = config["training"].get("scheduler")
+    if not scheduler_cfg or scheduler_cfg.get("name") != "reduce_on_plateau":
         return None
     return optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode="min",
-        factor=float(scheduler_cfg.get("factor", 0.5)),
-        patience=int(scheduler_cfg.get("patience", 3)),
+        factor=float(scheduler_cfg["factor"]),
+        patience=int(scheduler_cfg["patience"]),
     )
 
 
@@ -182,16 +181,16 @@ def _build_discriminator(config: Dict[str, Any], device: torch.device):
         raise ValueError(f"No discriminator registered for {model_name}")
     from GA_Predrnn.discriminator import Discriminator
 
-    gan_cfg = config.get("training", {}).get("gan", {})
-    return Discriminator(base_ch=int(gan_cfg.get("disc_base_ch", 64))).to(device)
+    gan_cfg = config["training"]["gan"]
+    return Discriminator(base_ch=int(gan_cfg["disc_base_ch"])).to(device)
 
 
 def run_training(
     config: Dict[str, Any],
     resume_from: Optional[str | Path] = None,
 ) -> Dict[str, Any]:
-    seed_everything(int(config.get("seed", 42)))
-    device = resolve_device(config.get("device", "auto"))
+    seed_everything(int(config["seed"]))
+    device = resolve_device(config["device"])
     train_loader, val_loader, _, tec_scaler, aux_scaler = build_loaders(
         config,
         device,
@@ -209,20 +208,20 @@ def run_training(
 
     checkpoint_path = model_dir / "model_state_dict.pth"
     training_cfg = config["training"]
-    use_amp = bool(training_cfg.get("use_amp", False)) and device.type == "cuda"
+    use_amp = bool(training_cfg["use_amp"]) and device.type == "cuda"
 
-    if bool(training_cfg.get("gan", {}).get("enabled", False)):
-        gan_cfg = training_cfg["gan"]
+    gan_cfg = training_cfg.get("gan")
+    if gan_cfg and gan_cfg["enabled"]:
         discriminator = _build_discriminator(config, device)
         g_optimizer = _build_optimizer(
             model,
             config,
-            learning_rate=float(gan_cfg.get("g_lr", training_cfg.get("lr", 1e-3))),
+            learning_rate=float(gan_cfg["g_lr"]),
         )
         d_optimizer = _build_optimizer(
             discriminator,
             config,
-            learning_rate=float(gan_cfg.get("d_lr", 1e-4)),
+            learning_rate=float(gan_cfg["d_lr"]),
         )
         scheduler_g = _build_scheduler(g_optimizer, config)
         scheduler_d = _build_scheduler(d_optimizer, config)
@@ -238,17 +237,19 @@ def run_training(
             device=device,
             epochs=int(training_cfg["epochs"]),
             patience=int(training_cfg["patience"]),
-            lambda_tec=float(gan_cfg.get("lambda_tec", 1.0)),
-            lambda_aux=float(gan_cfg.get("lambda_aux", 0.1)),
-            adv_weight=float(gan_cfg.get("adv_weight", 1.0)),
-            clip_grad=float(training_cfg.get("grad_clip", 1.0)),
+            lambda_tec=float(gan_cfg["lambda_tec"]),
+            lambda_aux=float(gan_cfg["lambda_aux"]),
+            adv_weight=float(gan_cfg["adv_weight"]),
+            clip_grad=float(training_cfg["grad_clip"]),
             use_amp=use_amp,
-            amp_dtype=str(training_cfg.get("amp_dtype", "bf16")),
+            amp_dtype=str(training_cfg["amp_dtype"]),
             scheduler_g=scheduler_g,
             scheduler_d=scheduler_d,
             log_path=log_dir,
             config=config,
-            aux_indices=tuple(gan_cfg.get("aux_indices", (2, 3, 4))),
+            # The loss compares exactly the columns the model was told to
+            # predict, so aux_indices has a single source: the model params.
+            aux_indices=tuple(config["model"]["params"]["aux_indices"]),
         )
         metrics = history
     else:
@@ -264,13 +265,11 @@ def run_training(
             optimizer=optimizer,
             scheduler=scheduler,
             model_save_path=checkpoint_path,
-            save_best=bool(training_cfg.get("save_best", True)),
+            save_best=bool(training_cfg["save_best"]),
             patience=int(training_cfg["patience"]),
             model_name=model_name,
-            learning_rate=float(training_cfg.get("lr", 1e-3)),
+            learning_rate=float(training_cfg["lr"]),
             batch_size=int(config["data"]["batch_size"]),
-            input_length=int(config["data"]["input_length"]),
-            output_length=int(config["data"]["output_length"]),
             device=device,
             log_path=log_dir,
             config=config,

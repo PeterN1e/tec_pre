@@ -6,7 +6,7 @@ data:
 model:
   name: E_P_D
   params:
-    predictor: convlstm
+    predictor_name: convlstm
     transmit_parameter: 3
 
 training:

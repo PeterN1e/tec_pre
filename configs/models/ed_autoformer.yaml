@@ -16,6 +16,8 @@ model:
     dropout: 0.05
     activation: gelu
     encode_channels: [64, 128, 256, 512]
+    # null decodes to input_length // 2 inside the model.
+    label_len: null
 
 training:
   epochs: 10

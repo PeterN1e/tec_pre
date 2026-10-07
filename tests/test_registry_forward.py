@@ -8,11 +8,11 @@ from core.registry import build_model
 
 
 def _small_config(model_name):
+    """Start from the real model YAML and only shrink the knobs a test names."""
     config = copy.deepcopy(load_config(model_name))
     config["data"]["batch_size"] = 1
     config["data"]["input_length"] = 6
     config["data"]["output_length"] = 2
-    config["model"]["params"] = {}
     return config
 
 
@@ -33,7 +33,7 @@ class RegistryForwardTests(unittest.TestCase):
         self._assert_forward(
             "E_P_D",
             {
-                "predictor": "convlstm",
+                "predictor_name": "convlstm",
                 "transmit_parameter": 1,
             },
         )
@@ -44,7 +44,7 @@ class RegistryForwardTests(unittest.TestCase):
                 self._assert_forward(
                     "E_P_D",
                     {
-                        "predictor": predictor,
+                        "predictor_name": predictor,
                         "transmit_parameter": 1,
                     },
                 )

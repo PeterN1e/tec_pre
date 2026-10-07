@@ -32,45 +32,47 @@ class GAPredrnnPredictor(nn.Module):
     """
     Encoder-decoder Predrnn with ST-Attention bridge and dual output heads.
 
+    The fused input channel count and the aux-head width are both consequences
+    of ``aux_indices`` (TEC plus one channel per selected index), so they are
+    derived here rather than configured separately.
+
     Args:
-        input_dim:      channels of the fused input (TEC + 3 aux = 4)
         hidden_dim:     ST-LSTM hidden channels
-        num_layers:     stacked ST-LSTM depth (default 3, matching paper)
-        kernel_size:    ST-LSTM conv kernel (default 5)
-        input_length:   number of input timesteps  (default 24 = 2 days x 12)
-        output_length:  number of output timesteps  (default 12 = 1 day  x 12)
-        aux_dim:        number of auxiliary channels to predict (default 3)
-        block_size:     Halo attention block size (default 8)
-        halo_size:      Halo attention halo size  (default 2)
-        num_heads:      Halo attention heads       (default 4)
+        num_layers:     stacked ST-LSTM depth
+        kernel_size:    ST-LSTM conv kernel
+        block_size:     Halo attention block size
+        halo_size:      Halo attention halo size
+        num_heads:      Halo attention heads
+        aux_indices:    positions in the aux vector to feed and predict
+        input_length:   number of input timesteps
+        output_length:  number of output timesteps
     """
 
     def __init__(
         self,
-        input_dim: int = 4,
-        hidden_dim: int = 64,
-        num_layers: int = 3,
-        kernel_size: int = 5,
-        input_length: int = 24,
-        output_length: int = 12,
-        aux_dim: int = 3,
-        block_size: int = 8,
-        halo_size: int = 2,
-        num_heads: int = 4,
-        aux_indices=(2, 3, 4),
+        hidden_dim: int,
+        num_layers: int,
+        kernel_size: int,
+        block_size: int,
+        halo_size: int,
+        num_heads: int,
+        aux_indices,
+        input_length: int,
+        output_length: int,
     ):
         super().__init__()
-        self.input_dim = input_dim
+        self.aux_indices = tuple(aux_indices)
+        self.aux_dim = len(self.aux_indices)
+        self.input_dim = 1 + self.aux_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.input_length = input_length
         self.output_length = output_length
-        self.aux_indices = tuple(aux_indices)
 
         # --- encoder ST-LSTM stack ---
         self.encoder_cells = nn.ModuleList()
         for i in range(num_layers):
-            in_dim = input_dim if i == 0 else hidden_dim
+            in_dim = self.input_dim if i == 0 else hidden_dim
             self.encoder_cells.append(STLSTMCell(in_dim, hidden_dim, kernel_size))
 
         # --- decoder ST-LSTM stack ---
@@ -90,7 +92,7 @@ class GAPredrnnPredictor(nn.Module):
         self.aux_head = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
-            nn.Linear(hidden_dim, aux_dim),
+            nn.Linear(hidden_dim, self.aux_dim),
         )
 
         # projection used inside decoder autoregressive loop
@@ -225,8 +227,9 @@ if __name__ == "__main__":
     torch.manual_seed(0)
     B, T_in, T_out, H, W = 2, 24, 12, 71, 73
     model = GAPredrnnPredictor(
-        input_dim=4, hidden_dim=32, num_layers=2,
-        kernel_size=3, input_length=T_in, output_length=T_out,
+        hidden_dim=32, num_layers=2,
+        kernel_size=3, block_size=8, halo_size=2, num_heads=4,
+        aux_indices=(2, 3, 4), input_length=T_in, output_length=T_out,
     )
     tec = torch.randn(B, T_in, H, W)
     aux = torch.randn(B, T_in, 6)

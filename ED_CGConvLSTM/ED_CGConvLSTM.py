@@ -1,10 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
-from config import EDCGConvLSTMConfig, TrainConfig
-
-cfg_model = EDCGConvLSTMConfig()
-cfg_train = TrainConfig()
 
 
 # ========== 坐标网格工具函数（全局只算一次）==========
@@ -136,23 +132,23 @@ class CGConvLSTM(nn.Module):
 # ========== EDCGConvLSTM ==========
 class EDCGConvLSTM(nn.Module):
     """编码器-解码器 CGConvLSTM"""
-    def __init__(self, input_dim=cfg_model.input_dim,
-                 hidden_dim=cfg_model.hidden_dim,
-                 output_dim=cfg_model.output_dim,
-                 num_layers=cfg_model.num_layers,
-                 kernel_size=cfg_model.kernel_size,       # ★ 修复：原来是 cfg_model.num_layers
-                 input_length=cfg_train.input_length,
-                 output_length=cfg_train.output_length,
-                 use_checkpoint=None,
-                 use_torch_compile=None):
+    def __init__(self, input_dim,
+                 hidden_dim,
+                 output_dim,
+                 num_layers,
+                 kernel_size,
+                 input_length,
+                 output_length,
+                 use_checkpoint,
+                 use_torch_compile):
         super().__init__()
         self.input_length = input_length
         self.output_length = output_length
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.num_layers = num_layers
-        self.use_checkpoint = cfg_model.use_checkpoint if use_checkpoint is None else use_checkpoint
-        self.use_torch_compile = cfg_model.use_torch_compile if use_torch_compile is None else use_torch_compile
+        self.use_checkpoint = use_checkpoint
+        self.use_torch_compile = use_torch_compile
         self._compiled = None
 
         self.encoder = CGConvLSTM(input_dim, hidden_dim, num_layers, kernel_size,
@@ -214,7 +210,8 @@ class EDCGConvLSTM(nn.Module):
 
 # ========== 测试 ==========
 if __name__ == "__main__":
-    batch_size = 48
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    batch_size = 4
     seq_len = 36
     input_dim = 1
     hidden_dim = 60
@@ -223,11 +220,21 @@ if __name__ == "__main__":
     kernel_size = 3
     H, W = 71, 73
 
-    model = EDCGConvLSTM().to(cfg_train.device)
-    x = torch.randn(batch_size, seq_len, input_dim, H, W,device=cfg_train.device)
+    model = EDCGConvLSTM(
+        input_dim=input_dim,
+        hidden_dim=hidden_dim,
+        output_dim=output_dim,
+        num_layers=num_layers,
+        kernel_size=kernel_size,
+        input_length=12,
+        output_length=12,
+        use_checkpoint=False,
+        use_torch_compile=False,
+    ).to(device)
+    x = torch.randn(batch_size, seq_len, input_dim, H, W, device=device)
 
     # ★ 推理测试时关闭 autograd，内存从 ~20GB 降到几百 MB
     with torch.no_grad():
         pred = model(x)
 
-    print("预测输出形状:", pred.shape)   # (48, 12, 1, 71, 73)
+    print("预测输出形状:", pred.shape)   # (4, 12, 1, 71, 73)

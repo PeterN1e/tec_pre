@@ -1,10 +1,6 @@
 from E_P_D.CoordGate.CoordGateEncoder2 import CnnEncoder
 from E_P_D.CoordGate.CoordGateDecoder4 import CnnDecoder
-from config import TrainConfig,EPDConfig,DatasetConfig
 from common.DataFusion import FilmFusion
-cfg_train = TrainConfig()
-EPD_cfg = EPDConfig()
-DatasetCfg = DatasetConfig()
 import torch.nn as nn
 
 
@@ -59,11 +55,11 @@ def _build_predictor(
 
 class ModelEPD(nn.Module):
     def __init__(self,
-                 transmit_parameter = EPD_cfg.transmit_parameter,
-                 input_length = cfg_train.input_length,
-                 output_length = cfg_train.output_length,
-                 aux_dim = DatasetCfg.aux_dim,
-                 predictor_name = EPD_cfg.EPDmodel_name,
+                 transmit_parameter,
+                 input_length,
+                 output_length,
+                 aux_dim,
+                 predictor_name,
                  ):
         """
         :param transmit_parameter:

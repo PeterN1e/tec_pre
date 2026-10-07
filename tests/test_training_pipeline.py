@@ -64,8 +64,10 @@ class TrainingPipelineTests(unittest.TestCase):
                 "indices_subdir": "indices",
                 "height": 4,
                 "width": 5,
+                # ModelCanon's three-day difference baseline needs
+                # input_length >= 3 * output_length.
                 "input_length": 12,
-                "output_length": 6,
+                "output_length": 4,
                 "batch_size": 1,
                 "num_workers": 0,
                 "pin_memory": False,
@@ -144,7 +146,6 @@ class TrainingPipelineTests(unittest.TestCase):
             "block_size": 4,
             "halo_size": 1,
             "num_heads": 2,
-            "aux_output_dim": 3,
             "aux_indices": [2, 3, 4],
         }
         config["training"].update(

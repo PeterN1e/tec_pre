@@ -1,12 +1,11 @@
 import torch.nn as nn
 import torch
-from config import FusionConfig
-FusionConfig = FusionConfig()
+
 class FilmFusion(nn.Module):
     """
-
+    FiLM modulation of a feature map by auxiliary indices.
     """
-    def __init__(self, aux_dim, channel = FusionConfig.channel ,out_dim=3):
+    def __init__(self, aux_dim, channel, out_dim=3):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(aux_dim, 32),

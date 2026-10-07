@@ -1,7 +1,6 @@
 import  torch
 import torch.nn as nn
 import torch.nn.functional as F
-from config import TrainConfig
 class Chomp1d(nn.Module):
     def __init__(self,chomp_size):
         super().__init__()

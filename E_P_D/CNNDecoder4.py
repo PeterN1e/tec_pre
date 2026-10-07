@@ -1,5 +1,3 @@
-from config import TrainConfig
-cfg_train = TrainConfig()
 import torch
 import torch.nn as nn
 class CnnDecoder(nn.Module):
@@ -33,6 +31,6 @@ class CnnDecoder(nn.Module):
 
 if __name__ == '__main__':
     test_a = CnnDecoder(transmit_parameter_de=3)
-    test = torch.randn(cfg_train.batch_size, 36,12, 18, 19)
+    test = torch.randn(4, 36, 12, 18, 19)
     a = test_a(test)
     print(a.size())

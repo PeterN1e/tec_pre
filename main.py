@@ -7,14 +7,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from core.config import load_config, model_slug, resolve_output_dir
-from core.trainer import resolve_device, run_training
+from core.registry import registered_models
+from core.trainer import run_training
 from core.inference import predict_split
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'WenQuanYi Micro Hei']
 plt.rcParams['axes.unicode_minus'] = False
 
-MODEL_CHOICES = ["E_P_D", "ED_CGConvLSTM", "GA_Predrnn", "ED_Autoformer", "ModelCanon"]
-EPD_PREDICTORS = {"1": "convlstm", "2": "convgru", "3": "tcn", "4": "transformer"}
+# 仅用于菜单展示与排序；实际可用的模型以 registry 为准（见 _menu_models）
+CANONICAL_MODELS = ["E_P_D", "ED_CGConvLSTM", "GA_Predrnn", "ED_Autoformer", "ModelCanon"]
+EPD_PREDICTORS = {
+    "1": "convlstm",
+    "2": "convgru",
+    "3": "tcn",
+    "4": "transformer",
+}
 
 
 def _plot_loss(history, model_dir):
@@ -54,7 +61,7 @@ def _plot_loss(history, model_dir):
     plt.show()
 
 
-def _interactive_visualize(result):
+def _interactive_visualize(result, save_dir=None):
     """按需读取单一样本，避免把整份预测数组载入内存。"""
     from common.pic_show7 import pic_show
 
@@ -74,7 +81,13 @@ def _interactive_visualize(result):
             pred_frame = np.asarray(prediction[idx], dtype=np.float32)
             target_frame = np.asarray(target[idx], dtype=np.float32)
             delta = target_frame - pred_frame
-            pic_show(target_frame, pred_frame, np.asarray(aux_target[idx]), delta)
+            pic_show(
+                target_frame,
+                pred_frame,
+                np.asarray(aux_target[idx]),
+                delta,
+                save_dir=save_dir,
+            )
             print("完成绘制")
         else:
             print("输入超出范围，退出")
@@ -136,63 +149,91 @@ def _log_evaluation(metrics, model_name, output_dir):
     fh.close()
 
 
+def _menu_models():
+    """菜单候选以注册表为准，列表与已注册模型脱节时立即报错而不是静默漏项。"""
+    registered = set(registered_models())
+    models = [name for name in CANONICAL_MODELS if name.lower() in registered]
+    missing = sorted(registered - {name.lower() for name in models})
+    if missing:
+        raise RuntimeError(
+            f"模型已注册但不在菜单里，请更新 CANONICAL_MODELS: {missing}"
+        )
+    return models
+
+
+def _choose(prompt, options):
+    """options: {编号: 值}。非法输入重新提问，不静默回退到默认值。"""
+    while True:
+        raw = input(prompt).strip()
+        if raw in options:
+            return options[raw]
+        print(f"  输入无效，请输入 {' / '.join(sorted(options))} 之一")
+
+
 def main():
-    np.random.seed(42)
     warnings.filterwarnings('ignore')
 
     print("=" * 40)
     print("  电离层 TEC 预测系统")
     print("=" * 40)
 
+    models = _menu_models()
     print("\n选择模型:")
-    for i, name in enumerate(MODEL_CHOICES, 1):
+    for i, name in enumerate(models, 1):
         print(f"  {i}. {name}")
-    model_idx = input("输入模型编号 (1-5): ").strip()
-    if model_idx not in [str(i) for i in range(1, 6)]:
-        print("输入错误，退出")
-        return
-    model_name = MODEL_CHOICES[int(model_idx) - 1]
+    model_name = _choose(
+        f"输入模型编号 (1-{len(models)}): ",
+        {str(i): name for i, name in enumerate(models, 1)},
+    )
 
     overrides = []
     if model_name == "E_P_D":
         print("\nE_P_D 时序预测器:")
-        print("  1. ConvLSTM")
-        print("  2. ConvGRU")
-        print("  3. TCN")
-        print("  4. Transformer")
-        pred_idx = input("选择预测器 (1-4，默认 1): ").strip() or "1"
-        predictor = EPD_PREDICTORS.get(pred_idx, "convlstm")
-        overrides.append(f"model.params.predictor={predictor}")
-        print(f"已选择: {predictor}")
+        for i, (number, predictor) in enumerate(EPD_PREDICTORS.items(), 1):
+            print(f"  {i}. {predictor}")
+        predictor = _choose(
+            f"选择预测器 (1-{len(EPD_PREDICTORS)}): ",
+            {str(i): name for i, (_, name) in enumerate(EPD_PREDICTORS.items(), 1)},
+        )
+        overrides.append(f"model.params.predictor_name={predictor}")
 
     print("\n选择操作:")
-    print("  1. 训练 + 训练后推理")
+    print("  1. 训练 + 训练后推理评估")
     print("  2. 仅训练")
     print("  3. 仅推理评估")
-    op = input("输入操作编号 (1-3): ").strip()
-    if op not in ("1", "2", "3"):
-        print("输入错误，退出")
-        return
+    op = _choose(
+        "输入操作编号 (1-3): ",
+        {"1": ("train", "predict"), "2": ("train",), "3": ("predict",)},
+    )
 
     config = load_config(model_name=model_name, overrides=overrides)
-    device = resolve_device(config.get("device", "auto"))
     output_dir = resolve_output_dir(config)
-    slug = model_slug(model_name)
+    slug = model_slug(config["model"]["name"])
     model_dir = str(output_dir / slug)
 
-    if op in ("1", "2"):
+    training_cfg = config["training"]
+    data_cfg = config["data"]
+    print(
+        f"\n[{config['model']['name']}] epochs={training_cfg['epochs']} "
+        f"lr={training_cfg['lr']} batch_size={data_cfg['batch_size']} "
+        f"input_length={data_cfg['input_length']} "
+        f"output_length={data_cfg['output_length']}"
+    )
+    print(f"  这些超参数来自 configs/base.yaml + configs/models/{slug}.yaml")
+
+    if "train" in op:
         print(f"\n开始训练 [{model_name}] ...")
         result = run_training(config)
         print("训练完成!")
         _plot_loss(result["history"], model_dir)
 
-    if op in ("1", "3"):
+    if "predict" in op:
         print(f"\n开始推理评估 [{model_name}] ...")
         result = predict_split(config, split="test")
         _log_evaluation(result["metrics"], model_name, output_dir)
 
         try:
-            _interactive_visualize(result)
+            _interactive_visualize(result, save_dir=os.path.join(model_dir, "pic"))
         except Exception as e:
             print(f"可视化跳过: {e}")
 

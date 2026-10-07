@@ -20,12 +20,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from config import EDAutoformerConfig, TrainConfig, DatasetConfig
-
-cfg_model = EDAutoformerConfig()
-cfg_train = TrainConfig()
-cfg_dataset = DatasetConfig()
-
 
 # ============================================================
 # 1. 系列分解 (Series Decomposition)
@@ -238,12 +232,12 @@ class EncoderLayer(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, d_model, d_ff, e_layers, factor, dropout, activation, moving_avg):
+    def __init__(self, d_model, n_heads, d_ff, e_layers, factor, dropout, activation, moving_avg):
         super().__init__()
         attn_layers = []
         for _ in range(e_layers):
             ac = AutoCorrelation(False, factor, attention_dropout=dropout, output_attention=False)
-            acl = AutoCorrelationLayer(ac, d_model, cfg_model.n_heads)
+            acl = AutoCorrelationLayer(ac, d_model, n_heads)
             attn_layers.append(
                 EncoderLayer(
                     acl,
@@ -322,7 +316,7 @@ class DecoderLayer(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, d_model, d_ff, d_layers, factor, dropout, activation, moving_avg, c_out):
+    def __init__(self, d_model, n_heads, d_ff, d_layers, factor, dropout, activation, moving_avg, c_out):
         super().__init__()
         decoder_layers = []
         for _ in range(d_layers):
@@ -330,8 +324,8 @@ class Decoder(nn.Module):
             ac_cross = AutoCorrelation(False, factor, attention_dropout=dropout, output_attention=False)
             decoder_layers.append(
                 DecoderLayer(
-                    AutoCorrelationLayer(ac_self, d_model, cfg_model.n_heads),
-                    AutoCorrelationLayer(ac_cross, d_model, cfg_model.n_heads),
+                    AutoCorrelationLayer(ac_self, d_model, n_heads),
+                    AutoCorrelationLayer(ac_cross, d_model, n_heads),
                     d_model,
                     c_out,
                     d_ff,
@@ -487,20 +481,20 @@ class EDAutoformer(nn.Module):
 
     def __init__(
         self,
-        input_length=cfg_train.input_length,
-        output_length=cfg_train.output_length,
-        aux_dim=cfg_dataset.aux_dim,
-        d_model=cfg_model.d_model,
-        n_heads=cfg_model.n_heads,
-        d_ff=cfg_model.d_ff,
-        e_layers=cfg_model.e_layers,
-        d_layers=cfg_model.d_layers,
-        moving_avg=cfg_model.moving_avg,
-        factor=cfg_model.factor,
-        dropout=cfg_model.dropout,
-        activation=cfg_model.activation,
+        input_length,
+        output_length,
+        aux_dim,
+        d_model,
+        n_heads,
+        d_ff,
+        e_layers,
+        d_layers,
+        moving_avg,
+        factor,
+        dropout,
+        activation,
+        encode_channels,
         label_len=None,
-        encode_channels=cfg_model.encode_channels,
     ):
         super().__init__()
         self.seq_len = input_length
@@ -529,9 +523,9 @@ class EDAutoformer(nn.Module):
         # 初始趋势来自输入通道(64 TEC + 6 aux), 需投影到输出通道(64 TEC),
         # 才能与解码器逐层累积的残差趋势(维度为 c_out)相加
         self.trend_proj = nn.Linear(d_in, self.tec_c_out)
-        self.encoder = Encoder(d_model, d_ff, e_layers, factor, dropout, activation, moving_avg)
+        self.encoder = Encoder(d_model, n_heads, d_ff, e_layers, factor, dropout, activation, moving_avg)
         self.decoder = Decoder(
-            d_model, d_ff, d_layers, factor, dropout, activation, moving_avg, c_out=self.tec_c_out
+            d_model, n_heads, d_ff, d_layers, factor, dropout, activation, moving_avg, c_out=self.tec_c_out
         )
 
         # ---------- TEC 解码器 ----------
@@ -595,9 +589,26 @@ class EDAutoformer(nn.Module):
 # 测试
 # ============================================================
 if __name__ == "__main__":
-    model = EDAutoformer().to(cfg_train.device)
-    tec_test = torch.randn(2, cfg_train.input_length, 71, 73, device=cfg_train.device)
-    aux_test = torch.randn(2, cfg_train.input_length, cfg_dataset.aux_dim, device=cfg_train.device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    input_length, output_length, aux_dim = 36, 12, 6
+
+    model = EDAutoformer(
+        input_length=input_length,
+        output_length=output_length,
+        aux_dim=aux_dim,
+        d_model=512,
+        n_heads=8,
+        d_ff=2048,
+        e_layers=2,
+        d_layers=1,
+        moving_avg=13,
+        factor=3,
+        dropout=0.05,
+        activation="gelu",
+        encode_channels=(64, 128, 256, 512),
+    ).to(device)
+    tec_test = torch.randn(2, input_length, 71, 73, device=device)
+    aux_test = torch.randn(2, input_length, aux_dim, device=device)
 
     with torch.no_grad():
         pred = model(tec_test, aux_test)
