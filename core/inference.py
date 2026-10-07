@@ -20,7 +20,6 @@ from core.evaluation import (
     evaluate_arrays,
     load_predictions,
     run_inference,
-    save_metrics,
 )
 from core.registry import build_model
 from core.trainer import resolve_device, seed_everything
@@ -174,13 +173,11 @@ def predict_split(
         arrays["persistence"],
         sample_chunk=sample_chunk,
     )
-    metrics_path = save_metrics(metrics, output_dir / "metrics.json")
 
     return {
         "model_dir": str(model_dir),
         "split": split,
         "metrics": metrics,
-        "metrics_path": str(metrics_path),
         "predictions_path": str(output_dir),
         "arrays": arrays,
     }

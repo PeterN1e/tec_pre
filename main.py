@@ -1,3 +1,4 @@
+import logging
 import os
 import warnings
 
@@ -53,14 +54,9 @@ def _plot_loss(history, model_dir):
 
 
 def _interactive_visualize(result):
-    """按需读取单一样本，避免把整份预测数组载入内存。
-
-    旧实现先 ``target - prediction`` 生成一个 4.35 GB 的完整差值数组，再
-    ``np.load(...)`` 无映射地读入 aux_target，两者叠加足以再次触发 OOM。
-    """
+    """按需读取单一样本，避免把整份预测数组载入内存。"""
     from common.pic_show7 import pic_show
 
-    # 产物目录里是分数组的 .npy，按需磁盘映射读取，不整份载入内存。
     arrays = result["arrays"]
     prediction = arrays["prediction"]
     target = arrays["target"]
@@ -82,6 +78,54 @@ def _interactive_visualize(result):
         else:
             print("输入超出范围，退出")
             break
+
+
+def _log_evaluation(metrics, model_name, model_dir):
+    """将评估指标格式化后同时输出到控制台和日志文件。"""
+    log_dir = os.path.join(model_dir, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f"{model_name}.log")
+
+    logger = logging.getLogger(f"eval.{model_name}")
+    logger.handlers.clear()
+    logger.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+
+    fh = logging.FileHandler(log_file, encoding="utf-8")
+    fh.setFormatter(fmt)
+    logger.addHandler(fh)
+
+    sh = logging.StreamHandler()
+    sh.setFormatter(fmt)
+    logger.addHandler(sh)
+
+    agg = metrics.get("aggregate", {})
+    per_step = metrics.get("per_step", {})
+    T = len(per_step.get("RMSE", []))
+    max_h = 2 * T
+
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info("  Evaluation Metrics")
+    logger.info("=" * 60)
+    for key in ("RMSE", "MAE", "R2", "SSIM"):
+        if key in agg:
+            logger.info(f"  {key:>6s} : {agg[key]:.6f}")
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info(f"  Per-Step Metrics (t+2h ~ t+{max_h}h)")
+    logger.info("=" * 60)
+    logger.info(f"  {'Step':>6s} {'Horizon':>8s} | {'RMSE':>8s} {'MAE':>8s} {'R2':>8s} {'SSIM':>8s}")
+    logger.info("  " + "-" * 56)
+    for t in range(T):
+        h = 2 * (t + 1)
+        horizon = f"t+{h}h"
+        logger.info(
+            f"  {t+1:>6d} {horizon:>8s} | "
+            f"{per_step['RMSE'][t]:8.4f} {per_step['MAE'][t]:8.4f} "
+            f"{per_step['R2'][t]:8.4f} {per_step['SSIM'][t]:8.4f}"
+        )
+    logger.info("=" * 60)
 
 
 def main():
@@ -137,16 +181,7 @@ def main():
     if op in ("1", "3"):
         print(f"\n开始推理评估 [{model_name}] ...")
         result = predict_split(config, split="test")
-
-        agg = result["metrics"].get("aggregate", {})
-        print("\n===== 评估结果 =====")
-        for key in ("rmse", "mae", "r2", "ssim"):
-            if key in agg:
-                print(f"  {key.upper()}: {agg[key]:.4f}")
-        for key in ("RMSE", "MAE", "R2", "SSIM"):
-            if key in agg:
-                print(f"  {key}: {agg[key]:.4f}")
-        print(f"  指标已保存: {result['metrics_path']}")
+        _log_evaluation(result["metrics"], model_name, model_dir)
 
         try:
             _interactive_visualize(result)
