@@ -63,20 +63,25 @@ class DeltaCriterion:
     """Combined loss for delta-prediction models.
 
     L = delta_weight   * L1(Δ_pred, Δ_true)
-      + recon_weight   * L1(baseline + Δ_pred, target)
+      + recon_weight   * L1(baseline + Δ_pred, target)   # 注意：数学上恒等于 L1(Δ_pred, Δ_true)
       + fourier_weight  * L1(|FFT(pred)|, |FFT(target)|)
       + ssim_weight    * (1 - SSIM(pred, target))
       + temporal_weight * L1(Δframe_pred, Δframe_target)
+
+    默认走 delta 主导的干净基线：fourier/ssim/temporal 关闭。
+    这三项在标准化数据（StandardScaler，非 [0,1]）上尺度失配——尤其 SSIMLoss 的
+    C1/C2 假设动态范围 L=1——实测会把 Δtec 的主目标拉偏（RMSE 4.14→7.58）。
+    权重为 0 的项直接跳过计算，省下每步的 CPU FFT。
     """
 
     def __init__(
         self,
         model,
         delta_weight=1.0,
-        recon_weight=0.3,
-        fourier_weight=0.2,
-        ssim_weight=0.1,
-        temporal_weight=0.05,
+        recon_weight=0.0,
+        fourier_weight=0.0,
+        ssim_weight=0.0,
+        temporal_weight=0.0,
     ):
         self.model = model
         self.l1 = nn.L1Loss()
@@ -95,25 +100,29 @@ class DeltaCriterion:
         input_baseline = tec_in[:, -output_length:, :, :]
         delta_true = tec_gt - input_baseline
 
-        recon_pred = input_baseline + delta_pred
+        loss = self.delta_weight * self.l1(delta_pred, delta_true)
 
-        delta_loss = self.l1(delta_pred, delta_true)
-        recon_loss = self.l1(recon_pred, tec_gt)
-        fourier_loss = self.fourier_loss(recon_pred, tec_gt)
-        ssim_loss = self.ssim_loss(recon_pred, tec_gt)
-
-        if output_length > 1:
-            temporal_loss = self.l1(
-                recon_pred[:, 1:] - recon_pred[:, :-1],
-                tec_gt[:, 1:] - tec_gt[:, :-1],
+        if self.recon_weight:
+            loss = loss + self.recon_weight * self.l1(
+                input_baseline + delta_pred, tec_gt
             )
-        else:
-            temporal_loss = torch.tensor(0.0, device=tec_in.device)
 
-        return (
-            self.delta_weight * delta_loss
-            + self.recon_weight * recon_loss
-            + self.fourier_weight * fourier_loss
-            + self.ssim_weight * ssim_loss
-            + self.temporal_weight * temporal_loss
-        )
+        if self.fourier_weight or self.ssim_weight:
+            recon_pred = input_baseline + delta_pred
+            if self.fourier_weight:
+                loss = loss + self.fourier_weight * self.fourier_loss(
+                    recon_pred, tec_gt
+                )
+            if self.ssim_weight:
+                loss = loss + self.ssim_weight * self.ssim_loss(recon_pred, tec_gt)
+
+        if self.temporal_weight:
+            if output_length > 1:
+                recon_pred = input_baseline + delta_pred
+                temporal_loss = self.l1(
+                    recon_pred[:, 1:] - recon_pred[:, :-1],
+                    tec_gt[:, 1:] - tec_gt[:, :-1],
+                )
+                loss = loss + self.temporal_weight * temporal_loss
+
+        return loss

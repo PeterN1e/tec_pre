@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import warnings
 
 import matplotlib.pyplot as plt
@@ -80,9 +81,9 @@ def _interactive_visualize(result):
             break
 
 
-def _log_evaluation(metrics, model_name, model_dir):
-    """将评估指标格式化后同时输出到控制台和日志文件。"""
-    log_dir = os.path.join(model_dir, "logs")
+def _log_evaluation(metrics, model_name, output_dir):
+    """将评估指标格式化后同时输出到控制台和 save/log/{model_name}.log。"""
+    log_dir = os.path.join(str(output_dir), "log")
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"{model_name}.log")
 
@@ -95,7 +96,9 @@ def _log_evaluation(metrics, model_name, model_dir):
     fh.setFormatter(fmt)
     logger.addHandler(fh)
 
-    sh = logging.StreamHandler()
+    # 显式走 sys.stdout，与 print()/input() 同一条流，避免 stdout/stderr 缓冲
+    # 不一致导致评估结果被拼在可视化输入提示之后。
+    sh = logging.StreamHandler(sys.stdout)
     sh.setFormatter(fmt)
     logger.addHandler(sh)
 
@@ -126,6 +129,11 @@ def _log_evaluation(metrics, model_name, model_dir):
             f"{per_step['R2'][t]:8.4f} {per_step['SSIM'][t]:8.4f}"
         )
     logger.info("=" * 60)
+    fh.flush()
+    sys.stdout.flush()
+    logger.removeHandler(fh)
+    logger.removeHandler(sh)
+    fh.close()
 
 
 def main():
@@ -181,7 +189,7 @@ def main():
     if op in ("1", "3"):
         print(f"\n开始推理评估 [{model_name}] ...")
         result = predict_split(config, split="test")
-        _log_evaluation(result["metrics"], model_name, model_dir)
+        _log_evaluation(result["metrics"], model_name, output_dir)
 
         try:
             _interactive_visualize(result)

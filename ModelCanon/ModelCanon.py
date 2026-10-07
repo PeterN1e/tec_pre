@@ -72,9 +72,23 @@ class ModelCanon(nn.Module):
         self.pred_queries = nn.Parameter(torch.randn(output_length, d_model) * (d_model ** -0.5))
 
         self.head = nn.Linear(d_model, height * width)
-        # Learnable day-over-day trend shortcut, initialized from the
-        # empirical mean-reversion observed in the data.
-        self.trend_alpha = nn.Parameter(torch.tensor(-0.4))
+
+    def _split_baseline(self, tec):
+        """拼接式两日基线（12 帧差分场）。
+
+        day1/day2/day3 从输入 36 帧中按 24h 周期切分。
+        前 6 帧（t+2h~t+12h）用最近一日差分 diff2 = day3 − day2；
+        后 6 帧（t+14h~t+24h）用较早一日差分 diff1 = day2 − day1。
+        模型只学 (day4 − day3) 与该基线之间的残差。
+        """
+        T = self.output_length
+        day1 = tec[:, -3 * T:-2 * T]
+        day2 = tec[:, -2 * T:-T]
+        day3 = tec[:, -T:]
+        diff1 = day2 - day1
+        diff2 = day3 - day2
+        half = T // 2
+        return torch.cat([diff2[:, :half], diff1[:, half:]], dim=1)
 
     def _tokenize(self, tec, aux):
         B, T, H, W = tec.shape
@@ -103,9 +117,8 @@ class ModelCanon(nn.Module):
         queries = self.pred_queries.unsqueeze(0).expand(B, -1, -1)
         memory = x.reshape(B, self.input_length * self.num_patches, self.d_model)
         dec = self.decoder(queries, memory)
-        delta = self.head(dec).view(B, self.output_length, self.height, self.width)
-        trend = tec[:, -self.output_length:] - tec[:, -2 * self.output_length:-self.output_length]
-        delta = delta + self.trend_alpha * trend
+        residual = self.head(dec).view(B, self.output_length, self.height, self.width)
+        delta = residual + self._split_baseline(tec)
         return delta
 
     def forward(self, tec, aux):

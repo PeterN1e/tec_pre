@@ -4,6 +4,7 @@ cfg_train = TrainConfig()
 cfg_dataset = DatasetConfig()
 
 import os
+import sys
 from pathlib import Path
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import logging
@@ -110,7 +111,7 @@ class TrainModel:
         self.logger.handlers.clear()
         fh = logging.FileHandler(str(log_file), encoding="utf-8")
         fh.setLevel(logging.INFO)
-        ch = logging.StreamHandler()
+        ch = logging.StreamHandler(sys.stdout)
         ch.setLevel(logging.INFO)
         fmt = logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
         fh.setFormatter(fmt)
@@ -354,7 +355,7 @@ def train_gan(
     logger.handlers.clear()
     fh = logging.FileHandler(os.path.join(log_dir, f"{model_name}.log"), encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
-    ch = logging.StreamHandler()
+    ch = logging.StreamHandler(sys.stdout)
     ch.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
     logger.addHandler(fh)
     logger.addHandler(ch)

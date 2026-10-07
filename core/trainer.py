@@ -132,10 +132,10 @@ def _build_criterion(model: nn.Module, config: Dict[str, Any]):
         return DeltaCriterion(
             model.model,
             delta_weight=float(lw.get("delta", 1.0)),
-            recon_weight=float(lw.get("recon", 0.3)),
-            fourier_weight=float(lw.get("fourier", 0.2)),
-            ssim_weight=float(lw.get("ssim", 0.1)),
-            temporal_weight=float(lw.get("temporal", 0.05)),
+            recon_weight=float(lw.get("recon", 0.0)),
+            fourier_weight=float(lw.get("fourier", 0.0)),
+            ssim_weight=float(lw.get("ssim", 0.0)),
+            temporal_weight=float(lw.get("temporal", 0.0)),
         ), "DeltaCriterion"
     loss_name = config.get("training", {}).get("loss", "l1").lower()
     losses = {
@@ -201,7 +201,7 @@ def run_training(
     model_name = config["model"]["name"]
     model_dir = resolve_output_dir(config) / model_slug(model_name)
     model_dir.mkdir(parents=True, exist_ok=True)
-    log_dir = model_dir / "logs"
+    log_dir = resolve_output_dir(config) / "log"
     log_dir.mkdir(parents=True, exist_ok=True)
     save_config(config, model_dir / "config.yaml")
     joblib.dump(tec_scaler, model_dir / "tec_scaler.pkl")

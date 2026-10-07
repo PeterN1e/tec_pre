@@ -20,8 +20,8 @@ training:
   lr: 0.0005
   loss_weights:
     delta: 1.0
-    recon: 0.3
-    fourier: 0.2
-    ssim: 0.1
-    temporal: 0.05
+    recon: 0.0
+    fourier: 0.0
+    ssim: 0.0
+    temporal: 0.0
 
