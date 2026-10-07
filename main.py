@@ -53,14 +53,20 @@ def _plot_loss(history, model_dir):
 
 
 def _interactive_visualize(result):
+    """按需读取单一样本，避免把整份预测数组载入内存。
+
+    旧实现先 ``target - prediction`` 生成一个 4.35 GB 的完整差值数组，再
+    ``np.load(...)`` 无映射地读入 aux_target，两者叠加足以再次触发 OOM。
+    """
     from common.pic_show7 import pic_show
 
-    prediction = result["arrays"]["prediction"]
-    target = result["arrays"]["target"]
-    aux_target = np.load(result["predictions_path"])["aux_target"]
-    delta = target - prediction
+    # 产物目录里是分数组的 .npy，按需磁盘映射读取，不整份载入内存。
+    arrays = result["arrays"]
+    prediction = arrays["prediction"]
+    target = arrays["target"]
+    aux_target = arrays["aux_target"]
 
-    total = prediction.shape[0]
+    total = int(prediction.shape[0])
     print(f"\n共 {total} 个样本，可输入索引 0~{total - 1} 查看可视化")
     for _ in range(10):
         try:
@@ -68,7 +74,10 @@ def _interactive_visualize(result):
         except (ValueError, EOFError):
             break
         if 0 <= idx < total:
-            pic_show(target[idx], prediction[idx], aux_target[idx], delta[idx])
+            pred_frame = np.asarray(prediction[idx], dtype=np.float32)
+            target_frame = np.asarray(target[idx], dtype=np.float32)
+            delta = target_frame - pred_frame
+            pic_show(target_frame, pred_frame, np.asarray(aux_target[idx]), delta)
             print("完成绘制")
         else:
             print("输入超出范围，退出")
@@ -134,6 +143,9 @@ def main():
         for key in ("rmse", "mae", "r2", "ssim"):
             if key in agg:
                 print(f"  {key.upper()}: {agg[key]:.4f}")
+        for key in ("RMSE", "MAE", "R2", "SSIM"):
+            if key in agg:
+                print(f"  {key}: {agg[key]:.4f}")
         print(f"  指标已保存: {result['metrics_path']}")
 
         try:

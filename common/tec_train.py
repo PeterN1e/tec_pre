@@ -13,7 +13,7 @@ import numpy as np
 import torch.nn.functional as F
 from tqdm import tqdm
 from core.checkpoint import save_checkpoint
-from common.EvaluationMetrics import evaluate_all
+from common.EvaluationMetrics import StreamingMetrics, evaluate_all
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 # 输入空间尺寸固定时，让 cuDNN 自动挑选最快卷积算法
@@ -280,8 +280,14 @@ def _generator_outputs(generator, tec, aux):
 
 @torch.no_grad()
 def _gan_validate(generator, loader, device):
+    """流式验证：只保留充分统计量，不把整个验证集的预测堆进内存。
+
+    旧实现把 pred/target 全部 append 再 concatenate，验证集两个数组就有数 GB，
+    再交给 ``evaluate_all`` 做整表 SSIM 卷积。改为逐 batch 累加指标，峰值内存
+    与验证集大小无关。
+    """
     generator.eval()
-    preds, trues = [], []
+    accumulator = StreamingMetrics()
     val_loss = 0.0
     for tec_in, aux_in, tec_gt, _ in loader:
         tec_in = tec_in.float().to(device)
@@ -289,12 +295,16 @@ def _gan_validate(generator, loader, device):
         tec_gt = tec_gt.float().to(device)
         pred_tec = generator(tec_in, aux_in)
         val_loss += F.l1_loss(pred_tec, tec_gt).item()
-        preds.append(pred_tec.cpu().numpy())
-        trues.append(tec_gt.cpu().numpy())
+        accumulator.update(
+            pred_tec.detach().cpu().numpy(),
+            tec_gt.detach().cpu().numpy(),
+        )
 
-    pred_np = np.concatenate(preds, axis=0)
-    true_np = np.concatenate(trues, axis=0)
-    metrics = evaluate_all(pred_np, true_np)
+    metrics = accumulator.aggregate()
+    # 与既有日志字段保持一致：训练循环读取 RMSE / R2 / SSIM。
+    metrics.setdefault("SSIM", float("nan"))
+    metrics.setdefault("R2", float("nan"))
+    metrics.setdefault("RMSE", float("nan"))
     avg_loss = val_loss / max(len(loader), 1)
     return avg_loss, metrics
 
