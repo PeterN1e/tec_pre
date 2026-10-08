@@ -14,6 +14,7 @@ data:
   batch_size: 4
   num_workers: 0
   pin_memory: true
+  window_step: 3
   splits:
     train: [200901, 201812]
     val: [201901, 202012]

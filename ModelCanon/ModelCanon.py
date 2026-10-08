@@ -111,21 +111,15 @@ class ModelCanon(nn.Module):
 
         self.head = nn.Linear(d_model, height * width)
         # 带符号、可学习的差分外推系数。相邻日差分是均值回归的（实测
-        # slope(diff3~diff2) ≈ -0.4），所以 recent 初值取负；older 差分预测力
-        # 接近 0，初值取 0，让模型自行决定是否需要它。
-        self.trend_alpha_recent = nn.Parameter(torch.tensor(-0.4))
-        self.trend_alpha_older = nn.Parameter(torch.tensor(0.0))
+        # slope(diff3~diff2) ≈ -0.4），所以初值取负。
+        self.trend_alpha = nn.Parameter(torch.tensor(-0.4))
 
     def _split_baseline(self, diff1, diff2):
-        """拼接式两日基线（12 帧差分场），带可学习带符号系数。
+        """统一基线（12 帧差分场），全部用最近一日差分 diff2 = day3 − day2。
 
-        前 6 帧（t+2h~t+12h）用最近一日差分 diff2 = day3 − day2；
-        后 6 帧（t+14h~t+24h）用较早一日差分 diff1 = day2 − day1。
+        实测 diff1（前二日差分）预测力接近 0，保留它反而引入噪声。
         """
-        half = self.output_length // 2
-        recent = self.trend_alpha_recent * diff2
-        older = self.trend_alpha_older * diff1
-        return torch.cat([recent[:, :half], older[:, half:]], dim=1)
+        return self.trend_alpha * diff2
 
     def _tokenize(self, x, conv, stream_id):
         """(B, T, C, H, W) -> (B, T, num_patches, d_model)。"""

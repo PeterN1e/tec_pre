@@ -51,6 +51,25 @@ def _month_in_range(
     return after_start & before_end
 
 
+def normalize_segments(value) -> List[Tuple[int, int]]:
+    """Normalize split config to list of (start_ym, end_ym) tuples.
+    
+    Accepts:
+        int              -> [(v, v)]
+        [int, int]       -> [(a, b)]
+        [[int,int], ...] -> [(a,b), ...]
+    """
+    if isinstance(value, int):
+        return [(value, value)]
+    if isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            raise ValueError("Split config cannot be empty")
+        if len(value) == 2 and isinstance(value[0], int) and isinstance(value[1], int):
+            return [(int(value[0]), int(value[1]))]
+        return [(int(seg[0]), int(seg[1])) for seg in value]
+    raise ValueError(f"Invalid split config format: {value}")
+
+
 class TecIonosphereDataset(Dataset):
     """TEC sequence dataset with year-level caching and vectorized windows."""
 
@@ -58,8 +77,10 @@ class TecIonosphereDataset(Dataset):
         self,
         tec_dir: str | Path,
         indices_dir: str | Path,
-        start_month: int = 200201,
-        end_month: int = 201012,
+        start_month: Optional[int] = None,
+        end_month: Optional[int] = None,
+        segments: Optional[Sequence[Sequence[int]]] = None,
+        window_step: int = 1,
         input_day_num: int = 3,
         output_day_num: int = 1,
         input_length: Optional[int] = None,
@@ -80,11 +101,19 @@ class TecIonosphereDataset(Dataset):
         self.tec_scaler = tec_scaler
         self.aux_scaler = aux_scaler
         self.aux_columns = tuple(aux_columns)
+        self.window_step = int(window_step)
 
-        self.start_y = start_month // 100
-        self.start_m = start_month % 100
-        self.end_y = end_month // 100
-        self.end_m = end_month % 100
+        # Handle backward compatibility: if segments not provided, build from start_month/end_month
+        if segments is None:
+            if start_month is None or end_month is None:
+                raise ValueError('Either segments or start_month/end_month must be provided')
+            self.segments = [(int(start_month), int(end_month))]
+        else:
+            self.segments = normalize_segments(segments)
+        
+        # Derive year range from segments for _available_years
+        self.start_y = min(s // 100 for s, _ in self.segments)
+        self.end_y = max(e // 100 for _, e in self.segments)
 
         self._year_cache: Dict[
             Tuple[int, bool],
@@ -113,6 +142,7 @@ class TecIonosphereDataset(Dataset):
         time_index: List[List[int]] = []
         step_years: List[int] = []
         step_local_indices: List[int] = []
+        step_segment_ids: List[int] = []
         year_offsets: Dict[int, int] = {}
         year_step_counts: Dict[int, int] = {}
         global_idx = 0
@@ -136,15 +166,16 @@ class TecIonosphereDataset(Dataset):
                 format="%Y%j",
             )
             frame = frame.assign(date=dates, month=dates.dt.month)
-            mask = _month_in_range(
-                frame["year"].to_numpy(),
-                frame["month"].to_numpy(),
-                self.start_y,
-                self.start_m,
-                self.end_y,
-                self.end_m,
-            )
-            frame = frame.loc[mask & (frame["hour"] % 2 == 0)]
+            
+            # Multi-segment filtering
+            frame_ym = frame["year"].to_numpy() * 100 + frame["month"].to_numpy()
+            segment_ids = np.full(len(frame), -1, dtype=np.int32)
+            for seg_id, (seg_start, seg_end) in enumerate(self.segments):
+                mask = (frame_ym >= seg_start) & (frame_ym <= seg_end)
+                segment_ids[mask] = seg_id
+            
+            frame = frame.loc[(segment_ids >= 0) & (frame["hour"] % 2 == 0)]
+            frame = frame.assign(segment_id=segment_ids[(segment_ids >= 0) & (frame["hour"] % 2 == 0)])
             frame = frame.reset_index(drop=True)
 
             count = 0
@@ -161,6 +192,7 @@ class TecIonosphereDataset(Dataset):
                 )
                 step_years.append(int(row.year))
                 step_local_indices.append(local_index)
+                step_segment_ids.append(int(row.segment_id))
                 global_idx += 1
                 count += 1
             year_step_counts[year] = count
@@ -171,9 +203,24 @@ class TecIonosphereDataset(Dataset):
         self.year_step_count = year_step_counts
         self._step_years = np.asarray(step_years, dtype=np.int32)
         self._step_local_indices = np.asarray(step_local_indices, dtype=np.int64)
-        self.valid_samples = (
-            self.total_steps - self.input_length - self.output_length + 1
-        )
+        self._step_segment_ids = np.asarray(step_segment_ids, dtype=np.int32)
+        
+        # Build segment info: (global_start, frame_count, valid_samples)
+        self._segment_info = []
+        total_valid = 0
+        for seg_id in range(len(self.segments)):
+            seg_mask = self._step_segment_ids == seg_id
+            seg_indices = np.where(seg_mask)[0]
+            if len(seg_indices) == 0:
+                self._segment_info.append((0, 0, 0))
+                continue
+            seg_global_start = int(seg_indices[0])
+            seg_frame_count = int(seg_indices[-1] - seg_indices[0] + 1)
+            seg_valid = max(0, (seg_frame_count - self.input_length - self.output_length) // self.window_step + 1)
+            self._segment_info.append((seg_global_start, seg_frame_count, seg_valid))
+            total_valid += seg_valid
+        
+        self.valid_samples = total_valid
         if self.valid_samples < 1:
             raise ValueError("Not enough time steps to build one training window")
 
@@ -265,12 +312,24 @@ class TecIonosphereDataset(Dataset):
     def __len__(self) -> int:
         return self.valid_samples
 
+    def _resolve_sample(self, index: int) -> Tuple[int, int]:
+        """Resolve flat sample index to (segment_id, offset_within_segment)."""
+        cumulative = 0
+        for seg_id, (_, _, seg_valid) in enumerate(self._segment_info):
+            if index < cumulative + seg_valid:
+                return seg_id, index - cumulative
+            cumulative += seg_valid
+        raise IndexError(f"Sample index {index} out of range")
+
     def __getitem__(self, index: int):
         if index < 0 or index >= self.valid_samples:
             raise IndexError(index)
-        tec_in, aux_in = self._collect_sequence(index, self.input_length)
+        seg_id, local_offset = self._resolve_sample(index)
+        seg_global_start = self._segment_info[seg_id][0]
+        global_start = seg_global_start + local_offset * self.window_step
+        tec_in, aux_in = self._collect_sequence(global_start, self.input_length)
         tec_gt, aux_gt = self._collect_sequence(
-            index + self.input_length,
+            global_start + self.input_length,
             self.output_length,
         )
         return (

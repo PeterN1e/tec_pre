@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -39,13 +39,10 @@ def seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def _split_range(config: Dict[str, Any], split: str) -> Tuple[int, int]:
+def _split_segments(config: Dict[str, Any], split: str) -> List[Tuple[int, int]]:
+    from data.tec_dataset import normalize_segments
     value = config["data"]["splits"][split]
-    if isinstance(value, int):
-        return value, value
-    if len(value) != 2:
-        raise ValueError(f"Split '{split}' must contain two month values")
-    return int(value[0]), int(value[1])
+    return normalize_segments(value)
 
 
 def build_datasets(
@@ -65,12 +62,13 @@ def build_datasets(
     splits = data_cfg["splits"]
 
     def make_dataset(split: str, is_train: bool):
-        start_month, end_month = _split_range(config, split)
+        segments = _split_segments(config, split)
+        window_step = int(data_cfg.get("window_step", 1))
         return TecIonosphereDataset(
             tec_dir=paths["tec_dir"],
             indices_dir=paths["indices_dir"],
-            start_month=start_month,
-            end_month=end_month,
+            segments=segments,
+            window_step=window_step,
             input_length=int(data_cfg["input_length"]),
             output_length=int(data_cfg["output_length"]),
             is_train=is_train,

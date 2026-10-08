@@ -24,7 +24,7 @@ from core.evaluation import (
 )
 from core.registry import build_model
 from core.trainer import resolve_device, seed_everything
-from data.tec_dataset import TecIonosphereDataset
+from data.tec_dataset import TecIonosphereDataset, normalize_segments
 
 
 def model_directory(config: Dict[str, Any]) -> Path:
@@ -48,16 +48,13 @@ def build_split_loader(
 ) -> DataLoader:
     paths = resolve_data_paths(config)
     data_cfg = config["data"]
-    month_range = data_cfg["splits"][split]
-    if isinstance(month_range, int):
-        start_month = end_month = month_range
-    else:
-        start_month, end_month = month_range
+    segments = normalize_segments(data_cfg["splits"][split])
+    window_step = int(data_cfg.get("window_step", 1))
     dataset = TecIonosphereDataset(
         tec_dir=paths["tec_dir"],
         indices_dir=paths["indices_dir"],
-        start_month=int(start_month),
-        end_month=int(end_month),
+        segments=segments,
+        window_step=window_step,
         input_length=int(data_cfg["input_length"]),
         output_length=int(data_cfg["output_length"]),
         is_train=False,
