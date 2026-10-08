@@ -49,7 +49,7 @@ def build_split_loader(
     paths = resolve_data_paths(config)
     data_cfg = config["data"]
     segments = normalize_segments(data_cfg["splits"][split])
-    window_step = int(data_cfg.get("window_step", 1))
+    window_step = int(data_cfg["window_step_eval"])
     dataset = TecIonosphereDataset(
         tec_dir=paths["tec_dir"],
         indices_dir=paths["indices_dir"],

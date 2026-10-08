@@ -15,7 +15,8 @@ data:
   batch_size: 4
   num_workers: 0
   pin_memory: true
-  window_step: 3  #窗口步长可调
+  window_step: 3  #训练窗口步长
+  window_step_eval: 1  #验证/测试窗口步长，1 表示全窗口覆盖
   splits:
     train: [200901, 201612]
     val: [201701, 201812]

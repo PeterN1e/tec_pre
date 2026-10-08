@@ -174,9 +174,12 @@ class TecIonosphereDataset(Dataset):
                 mask = (frame_ym >= seg_start) & (frame_ym <= seg_end)
                 segment_ids[mask] = seg_id
             
-            frame = frame.loc[(segment_ids >= 0) & (frame["hour"] % 2 == 0)]
-            frame = frame.assign(segment_id=segment_ids[(segment_ids >= 0) & (frame["hour"] % 2 == 0)])
-            frame = frame.reset_index(drop=True)
+            keep = (segment_ids >= 0) & (frame["hour"].to_numpy() % 2 == 0)
+            frame = (
+                frame.loc[keep]
+                .assign(segment_id=segment_ids[keep])
+                .reset_index(drop=True)
+            )
 
             count = 0
             for row in frame.itertuples(index=False):

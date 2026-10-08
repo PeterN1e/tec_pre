@@ -63,7 +63,8 @@ def build_datasets(
 
     def make_dataset(split: str, is_train: bool):
         segments = _split_segments(config, split)
-        window_step = int(data_cfg.get("window_step", 1))
+        step_key = "window_step" if is_train else "window_step_eval"
+        window_step = int(data_cfg[step_key])
         return TecIonosphereDataset(
             tec_dir=paths["tec_dir"],
             indices_dir=paths["indices_dir"],
